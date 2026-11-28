@@ -382,6 +382,7 @@
   // Alur yang sengaja menunggu jawaban (tambah klien, paket baru, unggah…): gangguan sementara diberi kalimat tenang,
   // bukan teks mentah Google. prefix (mis. 'Gagal: ') hanya untuk penolakan sungguhan.
   function waitErr(err, prefix) {
+    if (window.planRefused && window.planRefused(err)) return window.authMessage(err);   // Fase AF: batas paket
     if (errKind(err) === 'transient') return 'Belum tersambung. Coba lagi sebentar.';
     return (prefix || '') + window.authMessage(err);
   }
@@ -1271,8 +1272,11 @@
     ui.chromeNut = nutTabOn();
     const items = ui.chromeGuest ? GUEST_NAV : (ui.mode === 'public' && !ui.chromeNut ? NAV.public.filter(n => n[0] !== 'public-food') : NAV[ui.mode]);
     const coachRole = ui.mode === 'admin' && window.isCoachRole();   // Fase AE: login coach, tanpa halaman khusus pemilik
-    const sideItems = items.concat(ui.mode === 'admin' && !coachRole ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
+    // Fase AF: fitur di luar paket coach tampil abu dengan pil paket; ketuk = lembar "Tersedia di Pro".
+    const lk = f => ui.mode === 'admin' && window.planLocked && window.planLocked(f);
+    const sideItems = items.concat(ui.mode === 'admin' && !coachRole ? [['content', 'megaphone', 'Konten', 'content']] : []).concat(ui.mode === 'admin' && (finOn() || lk('finance')) ? [['finance', 'wallet', 'Keuangan', 'finance']] : []);
     const navBtn = function (n) {
+      if (n[3] && lk(n[3])) return '<button type="button" class="nav-item nav-locked" title="' + n[2] + ' · ' + window.planNeed(n[3]) + '" onclick="window.planLockedOpen(\'' + n[3] + '\')">' + icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' + window.planPill(n[3]) + '</button>';
       return '<button type="button" class="nav-item" data-view="' + n[0] + '" title="' + n[2] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
         icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' +
         (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="nav-badge hide" id="nav-unread-badge"></span>' : '') + '</button>';

@@ -382,6 +382,7 @@
   // Alur yang sengaja menunggu jawaban (tambah klien, paket baru, unggah…): gangguan sementara diberi kalimat tenang,
   // bukan teks mentah Google. prefix (mis. 'Gagal: ') hanya untuk penolakan sungguhan.
   function waitErr(err, prefix) {
+    if (window.planRefused && window.planRefused(err)) return window.authMessage(err);   // Fase AF: batas paket
     if (errKind(err) === 'transient') return 'Belum tersambung. Coba lagi sebentar.';
     return (prefix || '') + window.authMessage(err);
   }
@@ -1271,8 +1272,11 @@
     ui.chromeNut = nutTabOn();
     const items = ui.chromeGuest ? GUEST_NAV : (ui.mode === 'public' && !ui.chromeNut ? NAV.public.filter(n => n[0] !== 'public-food') : NAV[ui.mode]);
     const coachRole = ui.mode === 'admin' && window.isCoachRole();   // Fase AE: login coach, tanpa halaman khusus pemilik
-    const sideItems = items.concat(ui.mode === 'admin' && !coachRole ? [['content', 'megaphone', 'Konten']] : []).concat(ui.mode === 'admin' && finOn() ? [['finance', 'wallet', 'Keuangan']] : []);
+    // Fase AF: fitur di luar paket coach tampil abu dengan pil paket; ketuk = lembar "Tersedia di Pro".
+    const lk = f => ui.mode === 'admin' && window.planLocked && window.planLocked(f);
+    const sideItems = items.concat(ui.mode === 'admin' && !coachRole ? [['content', 'megaphone', 'Konten', 'content']] : []).concat(ui.mode === 'admin' && (finOn() || lk('finance')) ? [['finance', 'wallet', 'Keuangan', 'finance']] : []);
     const navBtn = function (n) {
+      if (n[3] && lk(n[3])) return '<button type="button" class="nav-item nav-locked" title="' + n[2] + ' · ' + window.planNeed(n[3]) + '" onclick="window.planLockedOpen(\'' + n[3] + '\')">' + icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' + window.planPill(n[3]) + '</button>';
       return '<button type="button" class="nav-item" data-view="' + n[0] + '" title="' + n[2] + '" onclick="window.navigate(\'' + n[0] + '\')">' +
         icon(n[1]) + '<span class="nav-label">' + n[2] + '</span>' +
         (n[0] === 'calendar' && ui.mode === 'admin' ? '<span class="nav-badge hide" id="nav-unread-badge"></span>' : '') + '</button>';
@@ -1473,7 +1477,7 @@
     keuangan: function () { return finSettingsHtml(); },
     latihan: function () { return exAliasHtml(); },
     akun: function () {
-      return (window.pasangCardHtml ? window.pasangCardHtml() : '') + (window.unduhCardHtml ? window.unduhCardHtml() : '') + '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
+      return (window.planCardHtml ? window.planCardHtml() : '') + (window.pasangCardHtml ? window.pasangCardHtml() : '') + (window.unduhCardHtml ? window.unduhCardHtml() : '') + '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
         '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>';
     },
     paket: function () { return '<div class="stack" id="pkg-root">' + pkgHtml() + '</div>'; },
@@ -2641,7 +2645,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { _lsSet('xnk_admin_me', null); window.adminMe = null; window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearFinCache) window.clearFinCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
+  function clearAdminCache() { _lsSet('xnk_admin_me', null); window.adminMe = null; _lsSet('xnk_admin_plan', null); window.adminPlan = null; window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearFinCache) window.clearFinCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -2719,6 +2723,7 @@
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
       if (b && b.me) window.setAdminMe(b.me);           // Fase AE
+      if (b && 'plan' in b && window.setAdminPlan) window.setAdminPlan(b.plan);   // Fase AF
       if (b && Array.isArray(b.holds) && !window.wqStale(snap)) window.holds = b.holds;   // Fase AD1
       ui.dataReady = true;
       window.hideGlobalLoader();
@@ -4775,7 +4780,7 @@
     const m = window.members.find(x => String(x.id) === String(id));
     if (!m) { window.showToast('Data klien tidak ditemukan.'); return; }
     window.selectedMemberId = m.id;
-    const tabs = CP_TABS;
+    const tabs = CP_TABS.filter(t => t[0] !== 'gizi' || !(window.planLocked && window.planLocked('nutrition')));   // Fase AF
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
     const tab0 = (ui.detail === 'client:' + m.id && ui.cpTab && ui.cpTab.id === String(m.id) && tabs.some(t => t[0] === cpTabName(ui.cpTab.name))) ? cpTabName(ui.cpTab.name) : 'ringkasan';
     const hid = n => n === tab0 ? '' : ' hide';
@@ -10995,7 +11000,15 @@
       window.showToast('Pendaftaran berhasil! Berikutnya masuk dengan nomor WhatsApp-mu.', 'party-popper');
       if (res.token && res.member) { _lsSet(MEMBER_TOKEN_KEY, res.token); window.setPublicMember(res.member); window.loadPublicData(); }
       else window.navigate('public-login');
-    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal mendaftar: ')); });
+    }).catch(function (err) {
+      done();
+      if (/Coach sedang penuh/.test(String(err && err.message || ''))) {   // Fase AF: batas klien paket coach
+        window.closeModal();
+        window.showWaPrompt(window.waUrl(window.coachPhoneById(data.coachId), 'Halo Coach, saya ' + data.name + ' ingin mendaftar PT (' + pkgName + '). Apakah masih ada tempat?'), 'Coach sedang penuh. Tanyakan tempat kosong langsung ke coach lewat WhatsApp.');
+        return;
+      }
+      window.showToast(waitErr(err, 'Gagal mendaftar: '));
+    });
   };
 
   // Halaman profil coach: dipakai portal klien dan pratinjau panel ("Lihat seperti klien").
@@ -13292,7 +13305,17 @@
       window.setPublicMember(res.member);
       window.loadPublicData();
       regx.step = 3; regDraw();
-    }).catch(function (e) { done(); err('Gagal mendaftar: ' + window.authMessage(e)); });
+    }).catch(function (e) {
+      done();
+      // Fase AF: coach sudah penuh menurut paketnya. Tanpa akun; ajak menghubungi coach lewat WhatsApp.
+      if (/Coach sedang penuh/.test(String(e && e.message || ''))) {
+        const wa = window.waUrl(window.coachPhoneById(data.coachId), 'Halo Coach, saya ' + data.name + ' ingin mendaftar PT (paket ' + p.namaPaket + '). Apakah masih ada tempat?');
+        setHTML('reg-x-err', '<span>Coach sedang penuh, jadi pendaftaran belum bisa dibuat. Tanyakan tempat kosong langsung ke coach.</span>' +
+          (wa ? ' <a class="btn btn-primary btn-block" style="margin-top:10px" href="' + h(wa) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Hubungi coach via WhatsApp</a>' : ''));
+        return;
+      }
+      err('Gagal mendaftar: ' + window.authMessage(e));
+    });
   };
   // Langkah 3–5 membuka layar yang sudah ada; begitu layar itu ditutup, lembar daftar kembali di langkah berikutnya.
   window.regDo = function (what) {
@@ -15632,6 +15655,80 @@
       window.showToast((one ? 'Coach diganti' : (r.members || []).length + ' klien diberi coach') + ((r.kept || []).length ? '. ' + r.kept.length + ' sesi bentrok tetap di coach lama.' : '.'));
       if (window.updateUI) window.updateUI();
     }, function (err) { done(); window.showToast(window.waitErr ? window.waitErr(err) : window.authMessage(err)); });
+  };
+  // ── Fase AF (T-2602): paket coach Starter / Pro / Studio ──────────────────────────────────────────────────────
+  // window.adminPlan datang dari getAdminBootstrap.plan (null = tanpa batas: xnk.my.id, coach gratis). Server yang menjaga
+  // (src/Plan.gs); di sini hanya kartu pemakaian di Pengaturan → Akun, menu yang terkunci tampil abu dengan pil paket,
+  // dan lembar "Tersedia di Pro" dengan tombol WhatsApp ke pengelola XNK.
+  const PLAN_LABEL = { finance: 'Keuangan', nutrition: 'Gizi', care: 'Asesmen & catatan sesi', photos: 'Foto progres', report: 'Laporan PDF',
+    share: 'Kartu bagikan', content: 'Info & tips', programAuto: 'Program otomatis', telegramFull: 'Semua pengingat WhatsApp', templates: 'Template program',
+    classes: 'Kelas grup', coachShare: 'Bagi hasil coach', multiCoach: 'Banyak coach' };
+  const PLAN_STUDIO = ['classes', 'coachShare', 'multiCoach'];
+  const PLAN_FEATS = Object.keys(PLAN_LABEL);
+  window.adminPlan = (function () { try { return JSON.parse(_lsGet('xnk_admin_plan') || 'null'); } catch (e) { return null; } })();
+  window.setAdminPlan = function (p) {
+    const was = JSON.stringify(window.adminPlan || null);
+    window.adminPlan = p && p.tier ? p : null;
+    if (window.adminPlan) _lsSet('xnk_admin_plan', JSON.stringify(window.adminPlan)); else _lsSet('xnk_admin_plan', null);
+    if (was !== JSON.stringify(window.adminPlan) && ui.mode === 'admin') buildChrome();
+  };
+  /** true bila fitur ini terkunci dan sudah ditegakkan. */
+  window.planLocked = function (f) {
+    const p = window.adminPlan;
+    return !!(p && p.enforced && (p.on || []).indexOf(f) === -1);
+  };
+  window.planNeed = function (f) { return PLAN_STUDIO.indexOf(f) !== -1 ? 'Studio' : 'Pro'; };
+  /** Pil kecil untuk baris menu yang terkunci. */
+  window.planPill = function (f) { return '<span class="plan-pill">' + h(window.planNeed(f)) + '</span>'; };
+  function upgradeLink(f) {
+    const p = window.adminPlan || {}, wa = String(p.upgradeWa || '').replace(/\D/g, '');
+    if (!wa) return '';
+    const txt = 'Halo, saya ingin ' + (f ? 'memakai ' + PLAN_LABEL[f] + ' (paket ' + window.planNeed(f) + ')' : 'naik paket') + '. Paket saya sekarang ' + (p.name || p.tier) + '.';
+    return 'https://wa.me/' + wa + '?text=' + encodeURIComponent(txt);
+  }
+  window.planLockedOpen = function (f) {
+    $('pl-title').textContent = 'Tersedia di ' + window.planNeed(f);
+    $('pl-sub').textContent = (PLAN_LABEL[f] || 'Fitur ini') + ' belum termasuk paket ' + ((window.adminPlan || {}).name || 'Anda') + '. Data lama tetap aman dan muncul lagi saat paket dinaikkan.';
+    const link = upgradeLink(f);
+    $('pl-wa').classList.toggle('hide', !link);
+    if (link) $('pl-wa').href = link;
+    window.openSheet('sheet-plan');
+  };
+  /** Jawaban server code 'plan*' (gerbang Plan.gs): buka lembar untuk fitur dari nama fungsinya bila diketahui. */
+  window.planRefused = function (err) {
+    if (!err || !/^plan/.test(String(err.code || ''))) return false;
+    if (err.code === 'plan') setTimeout(function () { window.planLockedOpen(''); }, 50);
+    return true;
+  };
+  function meter(label, used, max) {
+    const pct = max ? Math.min(100, Math.round(used / max * 100)) : 0, full = max && used > max;
+    return '<div class="plan-m"><div class="plan-mh"><span>' + h(label) + '</span><b' + (full ? ' class="txt-danger"' : '') + '>' + h(used) + ' / ' + (max ? h(max) : '∞') + '</b></div>' +
+      (max ? '<div class="plan-bar' + (full ? ' full' : '') + '"><i style="width:' + Math.max(3, pct) + '%"></i></div>' : '') + '</div>';
+  }
+  window.planCardHtml = function () {
+    const p = window.adminPlan;
+    if (!p || window.isCoachRole()) return '';
+    const off = PLAN_FEATS.filter(function (f) { return (p.on || []).indexOf(f) === -1; });
+    const cl = p.clients || {}, co = p.coaches || {};
+    const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+    const warn = !p.enforced && p.enforceFrom && p.enforceFrom > today;
+    const fmt = function (d) { try { return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return d; } };
+    const over = cl.max && cl.used > cl.max;
+    const link = upgradeLink('');
+    const chips = function (list) { return '<div class="plan-chips">' + list.map(function (f) { return '<span class="plan-chip">' + icon('lock') + h(PLAN_LABEL[f]) + '</span>'; }).join('') + '</div>'; };
+    const offPro = off.filter(function (f) { return PLAN_STUDIO.indexOf(f) === -1; }), offStudio = off.filter(function (f) { return PLAN_STUDIO.indexOf(f) !== -1; });
+    const row = function (ic, t, bad) { return '<li' + (bad ? ' class="bad"' : '') + '>' + icon(ic) + '<span>' + t + '</span></li>'; };
+    return '<div class="card-flat stack plan-card"><div class="plan-top"><p class="li-title">Paket Anda</p><span class="plan-tier">' + h(p.name || p.tier) + '</span></div>' +
+      meter('Klien aktif', cl.used || 0, cl.max || 0) + meter('Coach', co.used || 0, co.max || 0) +
+      (warn ? '<ul class="plan-rows">' + row('calendar', 'Berlaku penuh <b>' + h(fmt(p.enforceFrom)) + '</b>') +
+        (over ? row('users', 'Klien aktif ' + h(cl.used) + ' · batas ' + h(cl.max) + ' · klien baru ditahan', true) : '') +
+        (off.length ? row('eye-off', 'Fitur di luar paket disembunyikan · data aman') : '') + '</ul>' : '') +
+      (off.length ? '<details class="plan-fold"><summary>' + icon('lock') + '<span>Belum termasuk</span><b>' + off.length + '</b>' + icon('chevron-down') + '</summary>' +
+        (offPro.length ? '<p class="plan-cap">Ada di Pro</p>' + chips(offPro) : '') +
+        (offStudio.length ? '<p class="plan-cap">Ada di Studio</p>' + chips(offStudio) : '') + '</details>' : '') +
+      (!off.length ? '<p class="plan-cap">Semua fitur termasuk</p>' : '') +
+      (link && (off.length || cl.max) ? '<a class="btn btn-primary btn-block plan-up" href="' + h(link) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Naik paket via WhatsApp</a>' : '') +
+      '<p class="plan-foot">' + icon('info') + 'Klien cuti tidak dihitung</p></div>';
   };
 })();
 </script>

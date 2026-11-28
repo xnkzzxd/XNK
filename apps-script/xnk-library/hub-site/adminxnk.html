@@ -300,6 +300,44 @@
   @media (hover: hover) { .menu button:not(:disabled):hover { background: var(--soft); } }
   dialog { border: 1px solid var(--line); border-radius: 14px; padding: 20px; background: var(--card); color: var(--fg); box-shadow: var(--shadow); width: min(400px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgba(0,0,0,.3); }
+  #dlgPlan { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
+  #dlgPlan .phead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  #dlgPlan .phead h3 { margin: 0; }
+  .pseg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--soft); margin: 0 0 6px; }
+  .pseg button { min-height: 40px; border: 0; border-radius: 9px; background: transparent; font: inherit; font-weight: 700; color: var(--mut); cursor: pointer; }
+  .pseg button.on { background: var(--card); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .pseg.sm button { min-height: 36px; font-size: .85rem; }
+  .pfold { border: 1px solid var(--line); border-radius: 12px; margin: 8px 0 0; overflow: hidden; }
+  .pfold > summary { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 12px; cursor: pointer; list-style: none; font-weight: 700; }
+  .pfold > summary::-webkit-details-marker { display: none; }
+  .pfold > summary b { margin-left: auto; font-size: .8rem; color: var(--mut); font-variant-numeric: tabular-nums; }
+  .pchev { width: 8px; height: 8px; border-right: 2px solid var(--mut); border-bottom: 2px solid var(--mut); transform: rotate(45deg); margin: -4px 2px 0 4px; transition: transform .15s; }
+  .pfold[open] .pchev { transform: rotate(-135deg); margin-top: 4px; }
+  .pfold .prows { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+  .pcap { margin: 14px 0 6px !important; font-size: .72rem !important; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mut); }
+  .pnote { margin: 4px 0 0 !important; font-size: .78rem !important; color: var(--mut); }
+  .prows { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  #dlgPlan .prow { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin: 0; padding: 0 12px; font-size: .9rem; font-weight: 600; color: var(--fg); cursor: pointer; }
+  #dlgPlan .prow + .prow { border-top: 1px solid var(--line); }
+  #dlgPlan .prow > span { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #dlgPlan .psw { appearance: none; -webkit-appearance: none; flex: none; width: 40px; height: 24px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 12px; background: var(--line); position: relative; cursor: pointer; transition: background .15s; }
+  #dlgPlan .psw::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform .15s; }
+  #dlgPlan .psw:checked { background: var(--fg); }
+  #dlgPlan .psw:checked::after { transform: translateX(16px); }
+  #dlgPlan .psw:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .pchips { display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+  .pchip { display: inline-flex; align-items: center; min-height: 20px; padding: 0 8px; border-radius: 999px; background: var(--soft); font-size: .72rem; font-weight: 700; color: var(--mut); white-space: nowrap; }
+  .pchip.add { background: var(--fg); color: var(--card); }
+  .pchip.off { text-decoration: line-through; }
+  .pchip.bad { background: var(--bad); color: #fff; }
+  #dlgPlan .plim { display: grid; grid-template-columns: 1fr 96px auto; align-items: center; gap: 10px; margin: 0 0 6px; }
+  #dlgPlan .plim .pl { font-size: .9rem; font-weight: 600; }
+  #dlgPlan .plim input { margin: 0; text-align: center; }
+  #dlgPlan #pp-e { margin: 8px 0 0; }
+  #dlgPlan .acts { margin-top: 18px; }
+  .psteps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: .78rem; color: var(--mut); }
+  .psteps span { padding: 2px 8px; border-radius: 999px; background: var(--soft); font-weight: 600; }
+  .psteps i { font-style: normal; }
   dialog h3 { margin: 0 0 6px; font-size: 1.05rem; }
   dialog p { margin: 0 0 18px; color: var(--mut); font-size: .9rem; white-space: pre-line; }
   dialog .acts { justify-content: flex-end; }
@@ -449,6 +487,7 @@
     <div class="acts"><button class="btn" value="no" id="dlgNo">Batal</button><button class="btn primary" value="ok" id="dlgOk">OK</button></div>
   </form>
 </dialog>
+<dialog id="dlgPlan" aria-label="Paket & fitur"></dialog>
 <div class="tip hide" id="tip" role="tooltip"></div>
 <div class="toast" id="dm" role="status" aria-live="polite"></div>
 <div class="busybar" id="bb" aria-hidden="true"><i></i></div>
@@ -666,9 +705,9 @@
       var age = bk.okAt ? ageDays(bk.okAt) : null;
       var due = !c.missing && !out && sub.plan === 'bulanan';
       return { s: s, c: c, name: HUB[s] || s, st: st, x: x, bk: bk, age: age, pu: pu, probs: probs, qs: qs, q: q, qy: qy, pl: (d.places || {})[s] || null,
-        bkLate: !c.missing && !out && (age == null || age > 8 || !!bk.fails), sub: sub, out: out,
+        bkLate: !c.missing && !out && (age == null || age > 8 || !!bk.fails), sub: sub, out: out, plan: c.plan || null,
         ro: !c.missing && !out && (!!sub.readonly || !!(x && x.readonly)),
-        subDue: due && /^(segera|tenggang|lewat)$/.test(sub.state || ''), subBad: due && /^(tenggang|lewat)$/.test(sub.state || '') };
+        subDue: due && /^(segera|tenggang|turun|lewat)$/.test(sub.state || ''), subBad: due && /^(tenggang|turun|lewat)$/.test(sub.state || '') };
     }).sort(function (a, b) { return (!!a.out - !!b.out) || (b.probs.length > 0) - (a.probs.length > 0) || a.name.localeCompare(b.name, 'id'); });
   }
   var FILTERS = [
@@ -815,10 +854,10 @@
   // T-2251 / T-2264: langganan + pembayaran satu coach.
   function subCard(s, v) {
     var tiers = data.tiers || {}, sp = data.setupPrices || { standar: 400000, custom: 2100000 };
-    var bad = /^(tenggang|lewat)$/.test(v.state || '');
+    var bad = /^(tenggang|turun|lewat)$/.test(v.state || '');
     var big = !v.tier || v.tier === 'gratis' ? 'Gratis' : (v.tierName || 'Berbayar');
     var line = !v.tier || v.tier === 'gratis' ? 'Tanpa langganan' : CYCLE[v.cycle] + ' · ' + rp(v.price) +
-      (v.plan === 'bulanan' && v.due ? ' · jatuh tempo ' + day(v.due) + (v.state === 'segera' ? ' (' + (v.days === 0 ? 'hari ini' : v.days + ' hari lagi') + ')' : v.state === 'tenggang' ? ' · tenggang ' + v.graceLeft + ' hari lagi' : v.state === 'lewat' ? ' · lewat masa tenggang' : '') : '') +
+      (v.plan === 'bulanan' && v.due ? ' · jatuh tempo ' + day(v.due) + (v.state === 'segera' ? ' (' + (v.days === 0 ? 'hari ini' : v.days + ' hari lagi') + ')' : v.state === 'tenggang' ? ' · tenggang ' + v.graceLeft + ' hari lagi' : v.state === 'turun' ? ' · telat bayar, batas Starter ' + v.graceLeft + ' hari lagi' : v.state === 'lewat' ? ' · lewat masa tenggang' : '') : '') +
       (v.plan === 'sekali' ? (v.state === 'lunas' ? ' · lunas' : ' · belum lunas') : '');
     var h = '<div class="stat"><span class="v' + (bad ? ' bad' : '') + '">' + esc(big) + '</span><span class="s' + (bad ? ' bad' : '') + '">' + esc(line) + '</span>' +
       (v.plan === 'bulanan' && v.due ? '<div class="w">' + dueTrack(v) + '<div class="scale"><span>jatuh tempo</span><span>' + (v.cycle === 'tahunan' ? '1 tahun' : '30 hari') + '</span></div></div>' : '') + '</div>';
@@ -861,6 +900,75 @@
         '<button class="btn" type="button" data-act="sub-edit" data-slug="' + esc(s) + '">Atur paket</button></div>';
     }
     return h;
+  }
+  // Fase AF: paket & fitur satu coach (isi paket dari Langganan; pengecualian di dialog).
+  var TIERN = { gratis: 'Gratis', starter: 'Starter', pro: 'Pro', studio: 'Studio' };
+  function lim(v) { return v ? String(v) : '∞'; }
+  var PLAN_GROUPS = [['Fitur Pro', ['finance', 'nutrition', 'care', 'photos', 'report', 'share', 'content', 'programAuto', 'templates']], ['Pengingat', ['telegramFull']], ['Fitur Studio', ['classes', 'coachShare', 'multiCoach']]];
+  function pchips(list, p, cls) { return '<span class="pchips">' + list.map(function (f) { return '<span class="pchip ' + cls + '">' + esc(p.labels[f]) + '</span>'; }).join('') + '</span>'; }
+  function planCard(s, p) {
+    if (p.tier === 'gratis') return '<p class="mut">Tanpa batas · pilih paket di Langganan</p>';
+    var u = p.usage || {}, cl = u.clients || {}, co = u.coaches || {};
+    var maxC = p.limits.clients != null ? p.limits.clients : p.tierLimits.clients, maxK = p.limits.coaches != null ? p.limits.coaches : p.tierLimits.coaches;
+    var add = p.on.filter(function (f) { return p.base.indexOf(f) === -1; }), off = p.base.filter(function (f) { return p.on.indexOf(f) === -1; });
+    var today = wib(Date.now());
+    var h = '<div class="stat"><span class="v">' + esc(TIERN[p.tier] || p.tier) + '</span>' +
+      (p.lapse ? '<span class="pchip bad">Telat bayar · batas Starter</span>' : p.frozen ? '<span class="pchip">Lifetime · fitur beku</span>' : '') + '</div>';
+    h += '<div style="margin-top:10px">' + kv('Klien aktif', esc((cl.used != null ? cl.used : '–') + ' / ' + lim(maxC))) + kv('Coach', esc((co.used != null ? co.used : '–') + ' / ' + lim(maxK)));
+    if (add.length) h += kv('Tambahan', pchips(add, p, 'add'));
+    if (off.length) h += kv('Dimatikan', pchips(off, p, 'off'));
+    h += kv('Berlaku', !p.enforceFrom || p.enforceFrom <= today ? 'sekarang' : esc(day(p.enforceFrom)) + ' <span class="pchip">peringatan</span>');
+    h += kv('Logo & warna', p.brand && p.brand.ok ? 'Setup Custom lunas' : '<span class="mut">perlu Setup Custom</span>');
+    if (p.pushed && p.pushed.error) h += kv('Coach', '<span class="bad">Belum menerima: ' + esc(p.pushed.error) + '</span>');
+    if (p.brand && p.brand.pushed && p.brand.pushed.error) h += kv('Situs', '<span class="bad">' + esc(p.brand.pushed.error) + '</span>');
+    h += '<div class="psteps" aria-label="Telat bayar"><span>Tenggang 7 hr</span><i>→</i><span>Starter 14 hr</span><i>→</i><span>Baca saja</span></div></div>';
+    h += '<div class="acts foot"><button class="btn" type="button" data-act="plan-edit" data-slug="' + esc(s) + '">Ubah</button></div>';
+    return h;
+  }
+  // Dialog: paket (segmen), fitur (sakelar per baris + tanda bila beda dari paket), batas, mulai berlaku.
+  var pd = null, actBtn = null;
+  function planDialog(s, p) {
+    pd = { s: s, p: p, tier: p.tier, on: p.on.slice(), clients: p.limits.clients, coaches: p.limits.coaches,
+      when: !p.enforceFrom ? 'now' : 'date', date: p.enforceFrom || '' };
+    planDraw();
+    $('dlgPlan').showModal();
+  }
+  function planDraw() {
+    var p = pd.p, t = p.tiers[pd.tier] || { features: p.base, clients: 0, coaches: 0 }, base = p.frozen && pd.tier === p.tier ? p.base : t.features;
+    var seg = '<div class="pseg" role="radiogroup" aria-label="Paket">' + ['starter', 'pro', 'studio'].map(function (k) {
+      return '<button type="button" role="radio" aria-checked="' + (pd.tier === k) + '" class="' + (pd.tier === k ? 'on' : '') + '" data-act="plan-tier" data-v="' + k + '">' + TIERN[k] + '</button>'; }).join('') + '</div>';
+    pd.open = pd.open || {};
+    var rows = PLAN_GROUPS.map(function (g, gi) {
+      var n = g[1].filter(function (f) { return pd.on.indexOf(f) !== -1; }).length;
+      var diff = g[1].some(function (f) { return (pd.on.indexOf(f) !== -1) !== (base.indexOf(f) !== -1); });
+      return '<details class="pfold" data-g="' + gi + '"' + (pd.open[gi] ? ' open' : '') + '><summary><span>' + esc(g[0]) + '</span>' + (diff ? '<span class="pchip add">diubah</span>' : '') +
+        '<b>' + n + ' / ' + g[1].length + ' nyala</b><i class="pchev" aria-hidden="true"></i></summary><div class="prows">' + g[1].map(function (f) {
+        var on = pd.on.indexOf(f) !== -1, inBase = base.indexOf(f) !== -1;
+        var tag = on && !inBase ? '<span class="pchip add">tambahan</span>' : !on && inBase ? '<span class="pchip off">dimatikan</span>' : '';
+        return '<label class="prow"><span>' + esc(p.labels[f]) + tag + '</span><input type="checkbox" class="psw" role="switch" data-pf="' + f + '"' + (on ? ' checked' : '') + '></label>';
+      }).join('') + '</div></details>';
+    }).join('');
+    var limRow = function (k, label, v, tv) {
+      return '<div class="plim"><span class="pl">' + label + '</span><input data-pl="' + k + '" inputmode="numeric" autocomplete="off" placeholder="' + esc(lim(tv)) + '" value="' + esc(v != null ? v : '') + '" aria-label="' + label + '">' +
+        '<span class="pchip">paket ' + esc(lim(tv)) + '</span></div>';
+    };
+    var when = '<div class="pseg sm">' + [['now', 'Langsung'], ['warn', '30 hari lagi'], ['date', 'Tanggal…']].map(function (o) {
+      return '<button type="button" class="' + (pd.when === o[0] ? 'on' : '') + '" data-act="plan-when" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</div>' +
+      (pd.when === 'date' ? '<input type="date" id="pp-e" value="' + esc(pd.date) + '" aria-label="Tanggal mulai berlaku">' : '');
+    $('dlgPlan').innerHTML = '<form class="plan-form form" data-slug="' + esc(pd.s) + '" novalidate>' +
+      '<div class="phead"><h3>Paket & fitur</h3><span class="mut">' + esc(HUB[pd.s] || pd.s) + '</span></div>' + seg +
+      (pd.tier !== p.tier ? '<p class="pnote">Harga langganan ikut paket baru (' + esc(CYCLE[p.cycle] || 'bulanan') + ')</p>' : '') +
+      rows + '<p class="pcap">Batas</p>' + limRow('clients', 'Klien aktif', pd.clients, t.clients) + limRow('coaches', 'Coach', pd.coaches, t.coaches) +
+      '<p class="pnote">Kosong = ikut paket · 0 = tanpa batas</p><p class="pcap">Mulai berlaku</p>' + when +
+      '<div class="acts"><button class="btn" type="button" data-act="plan-batal">Batal</button><button class="btn primary" type="submit">Simpan</button></div></form>';
+  }
+  function planRead() {
+    var f = $('dlgPlan');
+    pd.on = [].slice.call(f.querySelectorAll('[data-pf]')).filter(function (x) { return x.checked; }).map(function (x) { return x.getAttribute('data-pf'); });
+    [].slice.call(f.querySelectorAll('.pfold')).forEach(function (d) { pd.open[d.getAttribute('data-g')] = d.open; });
+    var c = f.querySelector('[data-pl="clients"]'), k = f.querySelector('[data-pl="coaches"]'), e = $('pp-e');
+    pd.clients = c && c.value.trim() !== '' ? c.value.trim() : null; pd.coaches = k && k.value.trim() !== '' ? k.value.trim() : null;
+    if (e) pd.date = e.value;
   }
   function outBox(s, o) {
     var left = Number(o.daysLeft), f = o.final || {};
@@ -908,6 +1016,7 @@
       tileHtml('Sesi selesai 7 hr', x.sessions.done7d, histVals(c.hist, H.done, ax)) + tileHtml('Sesi 7 hr ke depan', x.sessions.next7d, histVals(c.hist, H.next, ax)) + '</div>';
     var cs = [], forms = [], side = '';
     if (!c.missing && !r.out) cs.push(card('Langganan & pembayaran', subCard(s, r.sub), 'subcard'));
+    if (!c.missing && !r.out && r.plan) cs.push(card('Paket & fitur', planCard(s, r.plan), 'plancard'));
     if (r.qs.length) side += '<div class="subsect"><h3>Kuota Google</h3>' + quotaBlocks(r, data.quotaLimits || QLIM) + '</div>';
     if (!c.missing) {
       var bk = r.bk, pu = r.pu;
@@ -1158,11 +1267,20 @@
     }, function (e) { toast(e.message, 'bad'); });
   }
   document.addEventListener('submit', function (ev) {
-    var f = ev.target.closest && ev.target.closest('.pl-form, .rn-form, .sub-form, .pay-form, .lv-form');
+    var f = ev.target.closest && ev.target.closest('.pl-form, .rn-form, .sub-form, .pay-form, .lv-form, .plan-form');
     if (!f) return;
     ev.preventDefault();
     var slug = f.getAttribute('data-slug') || f.getAttribute('data-sub');
     var val = function (k) { var el = f.querySelector('[data-f="' + k + '"]'); return el ? el.value : ''; };
+    if (f.classList.contains('plan-form')) {
+      planRead();
+      if (pd.when === 'date' && !pd.date) return toast('Isi tanggal mulai berlaku.', 'bad');
+      toast('Menyimpan paket ' + slug + '…');
+      var body = { on: pd.on, clients: pd.clients == null ? '' : pd.clients, coaches: pd.coaches == null ? '' : pd.coaches, enforceFrom: pd.when === 'now' ? '' : pd.when === 'warn' ? 'warn' : pd.date };
+      if (pd.tier !== pd.p.tier) body.tier = pd.tier;
+      return rpc('pusatPlanSave', [tok(), slug, body])
+        .then(function (d) { data = d; $('dlgPlan').close(); render(); toast('Paket & fitur ' + slug + ' disimpan.', 'ok'); }, function (e) { toast(e.message, 'bad'); });
+    }
     if (f.classList.contains('sub-form')) {
       toast('Menyimpan paket ' + slug + '…');
       return rpc('pusatSubSave', [tok(), slug, { tier: val('tier'), cycle: val('cycle'), price: val('price'), due: val('due'), email: val('email'), setupKind: val('setupKind'), setupPrice: val('setupPrice') }])
@@ -1242,6 +1360,7 @@
     var b = t.closest('[data-act]');
     if (!b || b.disabled) return;
     if (b.closest('#menu')) closeMenu(); else pressed = b;
+    actBtn = b;
     act(b.getAttribute('data-act'), b.getAttribute('data-slug') || '');
   });
 
@@ -1257,6 +1376,10 @@
       return;
     }
     if (a === 'tempat-hapus') return ask('Hapus tempat latihan?', 'Tempat latihan ' + slug + ' dihapus dari xnk.web.id.', 'Hapus', true).then(function (y) { if (y) savePlace(slug, '', ''); });
+    if (a === 'plan-edit') { var rr = model().filter(function (x) { return x.s === slug; })[0]; if (rr && rr.plan) planDialog(slug, rr.plan); return; }
+    if (a === 'plan-batal') { $('dlgPlan').close(); return; }
+    if (a === 'plan-tier' && pd) { planRead(); var nt = actBtn.getAttribute('data-v'), tb = pd.p.tiers[nt]; if (tb) pd.on = tb.features.slice(); pd.tier = nt; planDraw(); return; }
+    if (a === 'plan-when' && pd) { planRead(); pd.when = actBtn.getAttribute('data-v'); planDraw(); var de = $('pp-e'); if (de) de.focus(); return; }
     if (a === 'sub-edit' || a === 'sub-batal') { openSub = a === 'sub-edit' ? slug : ''; openPay = ''; render(); var sp = openSub && $('sb-' + openSub + '-t'); if (sp) { sp.focus(); sp.scrollIntoView({ block: 'nearest' }); } return; }
     if (a === 'pay-open' || a === 'pay-batal') { openPay = a === 'pay-open' ? slug : ''; openSub = ''; render(); var pk = openPay && $('py-' + openPay + '-a'); if (pk) { pk.focus(); pk.scrollIntoView({ block: 'nearest' }); } return; }
     if (a === 'leave' || a === 'leave-batal') {

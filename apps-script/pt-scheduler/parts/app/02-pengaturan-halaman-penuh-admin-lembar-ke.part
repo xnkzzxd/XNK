@@ -130,7 +130,7 @@
     keuangan: function () { return finSettingsHtml(); },
     latihan: function () { return exAliasHtml(); },
     akun: function () {
-      return (window.pasangCardHtml ? window.pasangCardHtml() : '') + (window.unduhCardHtml ? window.unduhCardHtml() : '') + '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
+      return (window.planCardHtml ? window.planCardHtml() : '') + (window.pasangCardHtml ? window.pasangCardHtml() : '') + (window.unduhCardHtml ? window.unduhCardHtml() : '') + '<div class="card-flat stack"><p class="li-sub">Keluar dari panel di perangkat ini.</p>' +
         '<button type="button" class="btn btn-danger btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + ' Keluar</button></div>';
     },
     paket: function () { return '<div class="stack" id="pkg-root">' + pkgHtml() + '</div>'; },

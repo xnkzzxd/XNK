@@ -159,9 +159,14 @@ function readHub(cfg, opts) {
     // T-2242: warna aksen dan logo (keduanya boleh kosong).
     const accent = String(c.accent == null ? '' : c.accent).trim().toLowerCase();
     if (accent && !ACCENT_NAMES.includes(accent)) throw new Error(`hub.json, "${slug}": warna "${accent}" tidak dikenal; pilih ${ACCENT_NAMES.slice(0, -1).join(', ')}, atau ${ACCENT_NAMES[ACCENT_NAMES.length - 1]}.`);
-    if (accent && accent !== 'hitam') out.accent = accent;
+    // Fase AF: logo, warna dan tanpa "Didukung XNK" hanya dengan Setup Custom lunas (customBrand: true, ditulis XNK HQ).
+    // false = keduanya diabaikan; tidak ada = coach lama (tetap seperti sekarang, belum diatur HQ).
+    if (c.customBrand != null && typeof c.customBrand !== 'boolean') throw new Error(`hub.json, "${slug}": customBrand harus true atau false.`);
+    const brandOk = c.customBrand !== false;
+    if (c.customBrand === true) out.customBrand = true;
+    if (brandOk && accent && accent !== 'hitam') out.accent = accent;
     const logo = String(c.logo == null ? '' : c.logo).trim();
-    if (logo) { out.logo = logo; out.logoFile = readLogo(logo, baseDir, slug); }
+    if (brandOk && logo) { out.logo = logo; out.logoFile = readLogo(logo, baseDir, slug); }
     const pl = cleanPlace(c.place);
     if (pl.error) throw new Error(`hub.json, "${slug}": ${pl.error}`);
     if (pl.place) out.place = pl.place;
@@ -394,7 +399,7 @@ function accentCss() {
 }
 
 /** Sidik warna + logo: ikut HASH service worker, supaya HP memuat ulang halaman bila tampilannya berubah. */
-function brandSig(c) { return (c.accent || '') + '|' + (c.logoFile ? c.logoFile.sig : ''); }
+function brandSig(c) { return (c.accent || '') + '|' + (c.logoFile ? c.logoFile.sig : '') + (c.customBrand ? '|own' : ''); }
 
 function manifestFor(c, start, kind) {
   const icons = c.logoFile
@@ -412,6 +417,8 @@ function brandPage(files, dir, c, kind) {
   const idx = dir + 'index.html';
   let html = files[idx];
   if (c.accent) html = html.replace(/<html lang="id">/, `<html lang="id" data-accent="${c.accent}" data-brand-accent="${c.accent}">`);
+  // Fase AF: Setup Custom = tanpa tanda "Didukung XNK" (layar masuk dan pojok kartu bagikan membaca data-own-brand).
+  if (c.customBrand) html = html.replace(/<html lang="id"/, '<html lang="id" data-own-brand').replace('</head>', '<style>.xnk-by{display:none!important}</style>\n</head>');
   const icon = c.logoFile ? `/${c.slug}/logo.${c.logoFile.ext}` : `/${c.slug}/icon.svg`;
   const head = [`<link rel="manifest" href="/${c.slug}/${dir.endsWith('klien/') ? 'klien/' : ''}manifest.webmanifest">`];
   if (c.logoFile) {

@@ -22,7 +22,7 @@ const TIERS = [
   {
     key: 'studio', name: 'Studio', bulanan: 549000, tahunan: 5490000, lifetime: 14900000, putus: 10900000,
     limit: 'Sampai 5 coach · klien tanpa batas',
-    items: ['Semua di Pro', 'Banyak coach, klien pilih coach', 'Kelas grup & bagi hasil coach', 'Nama, logo & warna sendiri'],
+    items: ['Semua di Pro', 'Banyak coach, klien pilih coach', 'Kelas grup & bagi hasil coach', 'Login sendiri untuk tiap coach'],
     fit: 'Untuk tim kecil atau studio privat. Wajib setup Custom.',
   },
 ];

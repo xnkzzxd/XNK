@@ -18,7 +18,7 @@ test('baca saja: setiap fungsi doPost diklasifikasi tepat sekali (WRITE atau REA
   // Penjaga kasar: nama yang jelas menulis tidak boleh lolos ke READ_OK tanpa alasan di daftar ini.
   const allowedWriteish = ['changeAdminPin', 'saveAdminPush', 'removeAdminPush', 'setAdminPushPrefs', 'saveMyPush', 'removeMyPush', 'setMyPushPrefs',
     'markSchedulesAsRead', 'markBadgesSeen', 'markGuideSeen', 'markNotifSeen', 'installReminderTrigger', 'sendTelegramTest', 'sendReminderTest',
-    'pushRelayAck', 'hubPushKey', 'hubSiteUrl', 'hubReadonly'];
+    'pushRelayAck', 'hubPushKey', 'hubSiteUrl', 'hubReadonly', 'hubPlan'];
   for (const n of L.READ_OK) {
     if (/^(save|delete|add|update|set|remove|upload|log|submit|create|join|leave|complete|decide|archive|restore|apply|copy|swap|accept|regenerate|reorder|mark|snooze|request|rate|sync|send|install|change|assign|push|hub)/.test(n) && !/^(get|hubStatus|hubExport|pushRelayPull)/.test(n)) {
       assert.ok(allowedWriteish.includes(n), n + ' looks like a write: put it in WRITE (or in allowedWriteish with a reason)');

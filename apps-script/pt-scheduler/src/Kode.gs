@@ -144,7 +144,9 @@ function doPost(e) {
     const limit = Object.prototype.hasOwnProperty.call(API_BODY_LIMITS, fn) ? API_BODY_LIMITS[fn] : APP_API_MAX_BYTES;
     if (raw.length > limit) throw new Error('Permintaan tidak valid.');
     _coachGate_(fn, args0_(req));   // Fase AE: token coach hanya untuk COACH_FNS, ID di argumen harus miliknya
-    _readonlyGate_(fn);   // T-2251: mode baca saja (langganan coach di hub) menolak fungsi tulis di sini saja
+    _readonlyGate_(fn);
+    _planGate_(fn);   // Fase AF: fitur di luar paket coach (hub)
+    // T-2251: mode baca saja (langganan coach di hub) menolak fungsi tulis di sini saja
     // Pengaturan dari file Drive dulu diterapkan saat halaman dibuka (doGet); halaman statis tidak membukanya.
     try { _applyPendingConfig_(false); } catch (err) { Logger.log('Pengaturan dari Drive gagal: ' + err); }
     const args = args0_(req);
@@ -161,7 +163,7 @@ function doPost(e) {
     if (idem && !idem.hit) _idemFail_(idem);
     const msg = String(err && err.message ? err.message : err);
     const bad = { ok: false, error: msg.replace(AUTH_ERROR_PREFIX + ': ', ''), auth: msg.indexOf(AUTH_ERROR_PREFIX) === 0 };
-    if (err && (err.code === 'readonly' || err.code === 'inflight' || err.code === 'owner_only')) bad.code = err.code;
+    if (err && (err.code === 'readonly' || err.code === 'inflight' || err.code === 'owner_only' || /^plan/.test(String(err.code || '')))) bad.code = err.code;
     return _appApiReply_(bad);
   } finally {
     _coachScope_ = null;   // Fase AE: lingkup coach hanya untuk satu panggilan
@@ -1191,6 +1193,7 @@ function saveCoachImpl_(token, data) {
     if (photoGiven) { values.photo = photo; values.photoFileId = fileId; }
 
     if (!data.id) {
+      _planAssertCoachRoom_();   // Fase AF: batas coach aktif paket
       const id = 'COACH-' + new Date().getTime();
       const row = [];
       for (let i = 0; i < sheet.getLastColumn(); i++) row.push('');
@@ -1281,6 +1284,7 @@ function setCoachActiveImpl_(token, id, aktif) {
     const all = _coachesAll_();
     const coach = all.find(function(c) { return c.id === String(id); });
     if (!coach) throw new Error('Coach tidak ditemukan.');
+    if (aktif && !coach.aktif) _planAssertCoachRoom_();   // Fase AF
     if (!aktif && coach.aktif && all.filter(function(c) { return c.aktif; }).length <= 1) throw new Error('Harus ada satu coach aktif.');
     const ctx = _ensureCoachSchema_();
     const fresh = _coachesAll_().find(function(c) { return c.id === coach.id; });
@@ -1769,6 +1773,7 @@ function _addMemberInternal_(memberData, options) {
     const existingRowIndex = _findMemberRowIndexByPhone_(data, memberData.phone); // index di `data` (0-based, termasuk header)
     const isPerpanjang = existingRowIndex !== -1;
     if (isPerpanjang && options.newOnly) return { status: 'exists' };
+    _planAssertClientRoom_(isPerpanjang ? data[existingRowIndex] : null);   // Fase AF: batas klien aktif paket coach
     const keyColumnReady = _memberKeyColumnReady_(sheet);
 
     const d = new Date();
@@ -1887,6 +1892,7 @@ function _addMemberInternal_(memberData, options) {
 
     return { status: 'success', id: id, renewed: isPerpanjang, packageId: paketId, packageName: paketNama, totalSessions: totalSessions, coachId: coachId, coachName: coachNama, waLink: waLink };
   } catch (error) {
+    if (error && error.code) throw error;   // Fase AF: batas paket membawa code sendiri
     throw new Error('Gagal menyimpan klien: ' + error.message);
   } finally {
     lock.releaseLock();
@@ -1987,7 +1993,9 @@ function registerNewClient(data) {
   }
   regCache.put('register_count', String(regCount + 1), 600);
 
-  const result = _addMemberInternal_({
+  let result;
+  try {
+  result = _addMemberInternal_({
     name: name,
     phone: phone,
     goal: goal + ' | [' + pkg.namaPaket + ' - ' + sessions + ' Sesi]',
@@ -1996,6 +2004,14 @@ function registerNewClient(data) {
     usedSessions: 0,
     coachId: pickedCoachId
   }, { newOnly: true, silent: true });
+  } catch (err) {
+    // Fase AF: coach penuh menurut paketnya. Tanpa akun; coach diberi tahu.
+    if (err && err.code === 'plan_clients') {
+      kirimNotifTelegram_('Calon klien ' + _escHtml_(name.split(' ')[0]) + ' mencoba daftar, tetapi batas klien paket sudah penuh.');
+      throw new Error('Coach sedang penuh. Hubungi coach lewat WhatsApp, ya.');
+    }
+    throw err;
+  }
 
   const isExisting = result.status === 'exists';
   const waLink = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(
@@ -2264,12 +2280,12 @@ function getPortalBootstrapImpl_(memberToken) {
     profile: found ? _memberPublicProfile_(found.row) : null,
     authLost: authLost.indexOf(AUTH_ERROR_PREFIX) !== -1 ? authLost : '',
     schedules: mine,
-    feedbackEnabled: feedbackOn,
-    shareEnabled: _shareEnabled_(),
+    feedbackEnabled: feedbackOn && !_planPartOff_('care'),   // Fase AF: fitur di luar paket coach
+    shareEnabled: _shareEnabled_() && !_planPartOff_('share'),
     pushKey: _pushPublicKey_(),   // Fase X: kosong = notifikasi mati (kartu tersembunyi)
     pendingRating: found && feedbackOn ? _tp_(tr, 'pendingRating', function() { return _pendingRating_(memberId, all); }) : null,
     packageEval: { eligible: !!(found && feedbackOn && _tp_(tr, 'packageEval', function() { return _packageEvalEligible_(found.row, all); })) },
-    info: { latestAt: found ? _tp_(tr, 'content', _contentLatestAt_) : '' },
+    info: { latestAt: found && !_planPartOff_('content') ? _tp_(tr, 'content', _contentLatestAt_) : '' },
     openSlots: _tp_(tr, 'openSlots', function() { return _openSlotsCached_({ days: horizon }, now, all, false, ver); }),
     openSlotsByCoach: _tp_(tr, 'slotsByCoach', function() { return _openSlotsByCoach_(all, ver, horizon, now, false); }),
     horizonDays: horizon,
@@ -2280,6 +2296,7 @@ function getPortalBootstrapImpl_(memberToken) {
     moreVer: moreVer,
     // Status coach bergantung jam, jadi selalu segar di sini (getPortalMore bisa dilewati dan tidak membawanya lagi saat cache kena).
     hold: found ? _tp_(tr, 'hold', function() { return _holdForMember_(memberId); }) : null,   // Fase AD1
+    plan: (function() { var i = _planInfo_(false); return i ? { tier: i.tier, on: i.on } : null; })(),   // Fase AF: fitur yang menyala
     readonly: _readonlyOn_(),   // T-2251: pita "hanya bisa dilihat" (tanpa catatan pemilik untuk klien)
     coachStatus: found ? _tp_(tr, 'coachStatus', function() { try { const c = String(found.row[10] || '').trim(); return { coachId: c, status: getCoachStatus(c) }; } catch (e) { return null; } }) : null,
     ms: _traceEnd_(tr, 'getPortalBootstrap')
@@ -2334,7 +2351,7 @@ function getPortalMoreImpl_(row, tr) {
       return hit;
     }
   }
-  const part = function(name, fn) { try { return _tp_(tr, name, fn); } catch (e) { return { error: String((e && e.message) || e) }; } };
+  const part = function(name, fn) { if (_planPartOff_(name)) return name === 'nutrition' ? { enabled: false } : null; try { return _tp_(tr, name, fn); } catch (e) { return { error: String((e && e.message) || e) }; } };
   const result = _plainJson_(_withSchedulesMemo_(function() {
     const coachId = String(row[10] || '').trim();
     const spy = {};
@@ -2438,6 +2455,7 @@ function getAdminBootstrap(token) {
     priceList: getPriceList(),
     businessHours: _businessHours_(),
     readonly: _readonlyInfo_(),   // T-2251: null = biasa; {on, note} = mode baca saja
+    plan: _planInfo_(true),       // Fase AF: null = tanpa batas; {tier, on, clients, coaches, …}
     holds: _holdsForAdmin_()      // Fase AD1: cuti/sakit/nonaktif yang aktif, direncanakan, atau diminta (tanpa catatan)
   };
 }
@@ -2557,7 +2575,7 @@ function getAdminMore(token, month, year, fresh) {
   const ymd = _wibParts_(new Date()).date.split('-').map(Number);
   const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
   const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
-  const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
+  const part = function (name, fn) { if (_planPartOff_(name)) return name === 'nutrition' ? { enabled: false } : null; try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
   // Fase W: hasil jadi disimpan sebentar (TTL ADMIN_MORE_CACHE_SECONDS, bawaan 90, 15–600). Kunci memuat hari WIB, bulan, tahun,
   // versi admin (naik di setiap _bumpMember_ / _bustSlots_ / _bustShared_) dan versi bersama. fresh=true (tarik-untuk-segarkan) melewati
   // pembacaan cache tetapi tetap menyimpan hasil baru. memberVers selalu segar.

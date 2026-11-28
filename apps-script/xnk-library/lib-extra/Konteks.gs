@@ -27,6 +27,7 @@ function _resetLibMemos_() {
   _exAliasMemo_ = null;
   _lockDepth_ = 0;
   _quotaAcc_ = null;
+  _planMemo_ = null;
   _quotaHold_ = 0;
   _rmdCurJob_ = null;
 }

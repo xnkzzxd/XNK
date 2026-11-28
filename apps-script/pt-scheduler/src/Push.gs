@@ -228,7 +228,7 @@ function _pushSesiMessages_(schedules, members, mode, parts, now, slotHour) {
     var name = _pushFirst_((m && m.name) || g.title) || 'Klien';
     var labels = g.times.map(function(x) { return x.label; });
     all.push({ name: name, t: g.times[0].t, label: labels[0], n: labels.length });
-    if (!m || _rmdIsOff_(m, 'sesi-besok')) return;    // klien mematikan pengingat sesi (atau ditahan, lihat HOLD_KEEP_TYPES)
+    if (!m || _rmdIsOff_(m, 'sesi-besok', true)) return;    // klien mematikan pengingat sesi (atau ditahan, lihat HOLD_KEEP_TYPES)
     var when = (mode === 'besok' ? 'besok' : 'hari ini') + ' jam ' + _pushJoinTimes_(labels);
     out.push({ target: 'm:' + g.id, kind: kind, slot: slot, title: mode === 'besok' ? 'Sesi besok' : 'Sesi hari ini',
       body: _pushClip_('Kak ' + name + ', ' + when + (g.coach ? ' bersama Coach ' + _pushFirst_(String(g.coach).replace(/^\s*coach\b\s*/i, '')) : '') + '.', 140) });
@@ -261,7 +261,7 @@ function _pushPrMessages_(list, slot) {
 function _pushMakanMessages_(waktu, clients, slot) {
   var kind = 'makan-' + waktu, out = [];
   (clients || []).forEach(function(c) {
-    if (c.mealOn === false || _rmdIsOff_(c, kind)) return;
+    if (c.mealOn === false || _rmdIsOff_(c, kind, true)) return;
     out.push({ target: 'm:' + c.id, kind: kind, slot: slot, title: waktu === 'pagi' ? 'Makan pagi' : 'Makan sore',
       body: 'Kak ' + (_pushFirst_(c.name) || 'Klien') + ', waktunya makan ' + waktu + '. Catat makananmu di Latihan → Makan.' });
   });
@@ -287,7 +287,7 @@ function _pushPlanMessages_(now) {
     if (_pushDue_(parts, hPr)) {
       var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       var rows = _tasksSheet_().getDataRange().getValues().slice(1);
-      msgs = msgs.concat(_pushPrMessages_(_buildPrDigest_(rows, pools.active.filter(function(c) { return !_rmdIsOff_(c, 'pr'); }), today), slotOf(hPr)));
+      msgs = msgs.concat(_pushPrMessages_(_buildPrDigest_(rows, pools.active.filter(function(c) { return !_rmdIsOff_(c, 'pr', true); }), today), slotOf(hPr)));
     }
     if (_pushDue_(parts, hPg)) msgs = msgs.concat(_pushMakanMessages_('pagi', pools.all, slotOf(hPg)));
     if (_pushDue_(parts, hSr)) msgs = msgs.concat(_pushMakanMessages_('sore', pools.all, slotOf(hSr)));

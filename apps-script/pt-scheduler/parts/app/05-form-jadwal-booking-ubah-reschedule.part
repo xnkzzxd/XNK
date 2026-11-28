@@ -916,7 +916,7 @@
     const m = window.members.find(x => String(x.id) === String(id));
     if (!m) { window.showToast('Data klien tidak ditemukan.'); return; }
     window.selectedMemberId = m.id;
-    const tabs = CP_TABS;
+    const tabs = CP_TABS.filter(t => t[0] !== 'gizi' || !(window.planLocked && window.planLocked('nutrition')));   // Fase AF
     // Data diperbarui (klien yang sama masih terbuka): tetap di tab terakhir, tidak lompat ke Ringkasan.
     const tab0 = (ui.detail === 'client:' + m.id && ui.cpTab && ui.cpTab.id === String(m.id) && tabs.some(t => t[0] === cpTabName(ui.cpTab.name))) ? cpTabName(ui.cpTab.name) : 'ringkasan';
     const hid = n => n === tab0 ? '' : ' hide';

@@ -48,6 +48,11 @@ on:
       kota:
         description: 'Kota tempat latihan, hanya untuk "simpan", mis. Jakarta Selatan (kosong = tetap)'
         required: false
+      merek:
+        description: 'Setup Custom lunas (logo, warna, tanpa "Didukung XNK"), hanya untuk "simpan" (tetap = tidak diubah)'
+        type: choice
+        options: [tetap, ya, tidak]
+        default: tetap
   push:
     branches: [main]
     paths: ['hub.json', 'logo/**', '.github/workflows/hub.yml']
@@ -104,11 +109,12 @@ jobs:
           IN_SLUG_BARU: ${{ inputs.slug_baru }}
           IN_TEMPAT: ${{ inputs.tempat }}
           IN_KOTA: ${{ inputs.kota }}
+          IN_MEREK: ${{ inputs.merek }}
         run: |
           if [ "$IN_AKSI" = "ganti-slug" ]; then
             node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json ganti-slug "$IN_SLUG" "$IN_SLUG_BARU"
           else
-            node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json "$IN_AKSI" "$IN_SLUG" "$IN_BRAND" "$IN_EXEC" --warna "$IN_WARNA" --logo "$IN_LOGO" --tempat "$IN_TEMPAT" --kota "$IN_KOTA"
+            node _xnk/apps-script/xnk-library/tools/hub-edit.js hub.json "$IN_AKSI" "$IN_SLUG" "$IN_BRAND" "$IN_EXEC" --warna "$IN_WARNA" --logo "$IN_LOGO" --tempat "$IN_TEMPAT" --kota "$IN_KOTA" --merek "$IN_MEREK"
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -715,8 +715,9 @@ function _rmdCheckTpl_(allowed, text) {
 function _rmdOffFrom_(cell) {
   return String(cell == null ? '' : cell).split(',').map(function(x) { return x.trim().toLowerCase(); }).filter(String);
 }
-function _rmdIsOff_(client, jenis) {
+function _rmdIsOff_(client, jenis, push) {
   // Fase AD1: klien yang ditahan (cuti/sakit/nonaktif) tidak menerima pengingat, kecuali HOLD_KEEP_TYPES (Cuti.gs).
+  if (push ? !_planPushOk_(jenis) : !_planReminderOk_(jenis)) return true;   // push = Web Push (Push.gs)   // Fase AF: Starter hanya pengingat dasar
   if (client && client.hold && HOLD_KEEP_TYPES.indexOf(jenis) === -1) return true;
   return ((client && client.off) || []).indexOf(jenis) !== -1;
 }

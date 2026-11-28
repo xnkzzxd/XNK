@@ -749,10 +749,11 @@ test('ganti slug: nama dicek sama dengan tools/build-hub.js (RESERVED, pola slug
 const wib = (d) => new Date(Date.now() + 7 * 3600 * 1000 + (d || 0) * 864e5).toISOString().slice(0, 10);
 /** Coach palsu dengan hubStatus + hubReadonly; `old` = Library lama tanpa hubReadonly. */
 function roCoach(secret, old) {
-  const st = { on: false, calls: [] };
+  const st = { on: false, calls: [], plans: [] };
   const fn = req => {
     if (req.args[0] !== secret) return { ok: false, error: 'Permintaan tidak valid.' };
     if (req.fn === 'hubStatus') return { ok: true, data: status(SHA_NEW) };
+    if (req.fn === 'hubPlan' && !old) { st.plans.push(req.args[1]); return { ok: true, data: { plan: { tier: req.args[1].tier, clients: { used: 3, max: 15 } } } }; }
     if (req.fn === 'hubReadonly' && !old) { st.calls.push(req.args.slice(1)); st.on = req.args[1] === true; return { ok: true, data: { on: st.on, note: req.args[2] || '', changed: true } }; }
     return { ok: false, error: 'Permintaan tidak valid.', code: 'unknown_fn' };
   };
@@ -790,7 +791,10 @@ test('langganan: hitungan status — aktif, segera (≤ 7 hari), tenggang 7 hari
   assert.equal(S('2026-11-19').state, 'segera');
   assert.deepEqual([S('2026-11-18').state, S('2026-11-18').graceLeft, S('2026-11-18').readonly], ['tenggang', 6, false]);
   assert.deepEqual([S('2026-11-12').state, S('2026-11-12').readonly], ['tenggang', false], 'day 7 of grace is still grace');
-  assert.deepEqual([S('2026-11-11').state, S('2026-11-11').readonly], ['lewat', true]);
+  // Fase AF: sesudah tenggang 14 hari batas Starter (turun), baru baca saja.
+  assert.deepEqual([S('2026-11-11').state, S('2026-11-11').readonly, S('2026-11-11').graceLeft], ['turun', false, 13]);
+  assert.deepEqual([S('2026-10-29').state, S('2026-10-29').readonly], ['turun', false], 'day 14 on Starter');
+  assert.deepEqual([S('2026-10-28').state, S('2026-10-28').readonly], ['lewat', true]);
   assert.equal(S('2026-11-01', 'off').readonly, false, 'manual off wins');
   assert.equal(S('2026-12-19', 'on').readonly, true, 'manual on wins');
   assert.equal(S('', 'on', 'gratis').readonly, true, 'owner can switch a free coach to read-only by hand');
@@ -817,8 +821,8 @@ test('langganan: simpan dari /adminxnk diperiksa; hanya pemilik; coach tak diken
 
 test('langganan: lewat tenggang = hubReadonly(true) ke coach itu saja; Tandai lunas = +1 bulan, riwayat, mati lagi', () => {
   const { e, a, b } = subEnv();
-  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(-8), price: 100000 });
-  assert.deepEqual(a.st.calls.at(-1), [true, 'Langganan lewat jatuh tempo ' + wib(-8) + '.'], 'pushed at once on save');
+  e.call('pusatSubSave', e.tok, 'claudia', { plan: 'bulanan', due: wib(-22), price: 100000 });
+  assert.deepEqual(a.st.calls.at(-1), [true, 'Langganan lewat jatuh tempo ' + wib(-22) + '.'], 'pushed at once on save');
   assert.equal(a.st.on, true);
   assert.equal(b.st.calls.length, 0);
   let r = e.call('pusatOverview', e.tok);
@@ -826,9 +830,9 @@ test('langganan: lewat tenggang = hubReadonly(true) ke coach itu saja; Tandai lu
   r = e.call('pusatAction', e.tok, 'sub-paid', 'claudia');
   assert.equal(r.ok, true, r.error);
   const v = subOf(r, 'claudia');
-  assert.equal(v.due, e.ctx.addMonth_(wib(-8)));
+  assert.equal(v.due, e.ctx.addMonth_(wib(-22)));
   assert.equal(v.history.length, 1);
-  assert.equal(v.history[0].due, wib(-8));
+  assert.equal(v.history[0].due, wib(-22));
   assert.equal(v.readonly, false);
   assert.deepEqual(a.st.calls.at(-1), [false, '']);
   assert.equal(a.st.on, false);
@@ -1227,4 +1231,71 @@ test('pembangun push: GitHub menolak → tidak melempar, dicatat di PUSHKICK_LAS
   e.call('pusatAction', e.tok, 'push-on', 'claudia');
   assert.deepEqual(atWib(e, 19, () => e.ctx.runPusatPushKick()), { started: false, code: 403 });
   assert.equal(JSON.parse(e.props.PUSHKICK_LAST).code, 403);
+});
+
+
+// ── Fase AF: paket & fitur ──
+const PLAN_SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'pt-scheduler', 'src', 'Plan.gs'), 'utf8');
+
+test('paket & fitur: isi paket di HQ sama dengan PLAN_TIERS di Plan.gs', () => {
+  const ctx = {};
+  vm.runInNewContext(PLAN_SRC.match(/var PLAN_FEATURES = [\s\S]*?\];/)[0] + PLAN_SRC.match(/var PLAN_TIERS = \{[\s\S]*?\n\};/)[0] + ';this.F = PLAN_FEATURES; this.T = PLAN_TIERS;', ctx);
+  const { e } = subEnv();
+  assert.deepEqual([...e.ctx.PUSAT_PLAN_FEATURES], [...ctx.F]);
+  for (const k of ['starter', 'pro', 'studio']) {
+    const h = e.ctx.PUSAT_PLAN_TIER[k], t = ctx.T[k];
+    assert.deepEqual([h.clients, h.coaches, [...h.features]], [t.clients, t.coaches, [...t.features]], k);
+  }
+  for (const f of ctx.F) assert.ok(e.ctx.PUSAT_PLAN_LABELS[f], 'label ' + f);
+});
+
+test('paket & fitur: simpan kirim hubPlan; tangga telat bayar Pro → Starter → baca saja; gratis tidak dihubungi', () => {
+  const { e, a } = subEnv();
+  const calls = () => a.st.plans.map(p => ({ args: [null, p] }));
+  e.call('pusatOverview', e.tok);
+  assert.equal(calls().length, 0, 'free coaches are never sent hubPlan');
+  e.call('pusatSubSave', e.tok, 'claudia', { tier: 'pro', cycle: 'bulanan', due: wib(20) });
+  assert.deepEqual(calls().at(-1).args[1], { tier: 'pro' });
+  let r = e.call('pusatPlanSave', e.tok, 'claudia', { on: ['finance', 'classes'], clients: '30', enforceFrom: 'warn' });
+  assert.equal(r.ok, true, r.error);
+  const w = calls().at(-1).args[1];
+  assert.equal(w.tier, 'pro');
+  assert.deepEqual(w.add, ['classes']);
+  assert.ok(w.off.includes('nutrition') && !w.off.includes('finance'));
+  assert.equal(w.limits.clients, 30);
+  assert.equal(w.enforceFrom, e.ctx.addDays_(wib(0), 30));
+  const v = r.data.coaches.find(c => c.slug === 'claudia').plan;
+  assert.ok(v.on.includes('classes') && !v.on.includes('nutrition'));
+  assert.match(e.call('pusatPlanSave', e.tok, 'claudia', { on: ['emas'] }).error, /tidak dikenal/);
+  assert.match(e.call('pusatPlanSave', e.tok, 'claudia', { clients: '-1' }).error, /bilangan bulat/);
+  assert.match(e.call('pusatPlanSave', e.tok, 'vinna', {}).error, /Pilih paket/);
+  // Telat bayar: lewat tenggang = Starter.
+  e.call('pusatSubSave', e.tok, 'claudia', { tier: 'pro', cycle: 'bulanan', due: wib(-10) });
+  assert.equal(calls().at(-1).args[1].tier, 'starter');
+  assert.equal(a.st.on, false, 'not read-only yet');
+  e.call('pusatSubSave', e.tok, 'claudia', { tier: 'pro', cycle: 'bulanan', due: wib(-22) });
+  assert.equal(a.st.on, true, 'read-only after 14 days on Starter');
+});
+
+test('paket & fitur: lifetime membekukan daftar fitur saat simpan pertama', () => {
+  const { e, a } = subEnv();
+  e.call('pusatSubSave', e.tok, 'claudia', { tier: 'pro', cycle: 'lifetime' });
+  e.call('pusatPlanSave', e.tok, 'claudia', {});
+  const p = JSON.parse(e.props.PLAN_claudia);
+  assert.deepEqual(p.features, [...e.ctx.PUSAT_PLAN_TIER.pro.features]);
+  e.ctx.PUSAT_PLAN_TIER.pro.features.push('fiturbaru');   // fitur yang ditambah kemudian
+  e.call('pusatPlanSave', e.tok, 'claudia', {});
+  const w = a.st.plans.at(-1);
+  assert.ok(!w.features.includes('fiturbaru'), 'later features stay locked for lifetime buyers');
+});
+
+test('paket & fitur: ganti paket dari dialog — cara bayar tetap, harga dari proposal, hubPlan paket baru', () => {
+  const { e, a } = subEnv();
+  e.call('pusatSubSave', e.tok, 'claudia', { tier: 'starter', cycle: 'tahunan', due: wib(100) });
+  const r = e.call('pusatPlanSave', e.tok, 'claudia', { tier: 'studio' });
+  assert.equal(r.ok, true, r.error);
+  const v = r.data.coaches.find(c => c.slug === 'claudia');
+  assert.deepEqual([v.sub.tier, v.sub.cycle, v.sub.price, v.sub.due], ['studio', 'tahunan', e.ctx.PUSAT_TIERS.studio.tahunan, wib(100)]);
+  assert.equal(a.st.plans.at(-1).tier, 'studio');
+  assert.match(e.call('pusatPlanSave', e.tok, 'claudia', { tier: 'emas' }).error, /Pilih paket/);
 });

@@ -32,7 +32,7 @@ const SERVICE_SWAPS = [
 // Setelah diganti, tidak boleh ada lagi pemakaian langsung layanan ini di kode produksi yang disalin.
 const FORBIDDEN = [/\bPropertiesService\b/, /\bCacheService\b/, /\bLockService\b/, /\bScriptApp\b/, /getActiveSpreadsheet/];
 // Memo per eksekusi yang dikosongkan Konteks.gs setiap konteks dipasang.
-const MEMOS = ['_memberMemo_', '_schedMemo_', '_readMemo_', '_progMemo_', '_exAliasMemo_', '_lockDepth_', '_quotaAcc_', '_quotaHold_', '_rmdCurJob_', '_coachScope_', '_coachGateFn_'];
+const MEMOS = ['_memberMemo_', '_schedMemo_', '_readMemo_', '_progMemo_', '_exAliasMemo_', '_lockDepth_', '_quotaAcc_', '_quotaHold_', '_rmdCurJob_', '_coachScope_', '_coachGateFn_', '_planMemo_'];
 // Fungsi produksi yang dipakai LibApi.gs.
 const NEEDED = ['_ensureCoachSchema_', '_getMemberDataSheet_', '_getMembersLogSheet_', '_readSchedulesAll_',
   '_priceListSheetAndColumns_', '_sessionSecret_', '_locked_', '_bustShared_', '_bustSlots_', '_installReminderTrigger_',
@@ -129,7 +129,7 @@ const TEXT_SWAPS = [
   ['Bagikan.html', "coachedBy: 'Dilatih oleh',", "coachedBy: 'Dilatih oleh', poweredBy: 'Didukung XNK',", 1],
   // Satu baris kecil di pinggir bawah kartu (di bawah blok foot, di dalam pinggir 72 px), warna tinta kartu: terbaca di semua gaya.
   ['Bagikan.html', '    ctx.globalAlpha = 1;\n  }\n  let fontsP = null;',
-    "    Tx(ctx, T.poweredBy, W - 72, R.H - 30, 24, 600, .6 * k, 'right');\n    ctx.globalAlpha = 1;\n  }\n  let fontsP = null;", 1],
+    "    if (!document.documentElement.hasAttribute('data-own-brand')) Tx(ctx, T.poweredBy, W - 72, R.H - 30, 24, 600, .6 * k, 'right');\n    ctx.globalAlpha = 1;\n  }\n  let fontsP = null;", 1],
 ];
 // Pengenal yang diganti di semua .gs (bukan deklarasinya, itu sudah dihapus di atas).
 const IDENT_SWAPS = [[/\bRMD_PORTAL_URL\b/g, '_siteUrl_()'], [/\bSHARE_QR_DEFAULT\b/g, '_siteUrl_()']];

@@ -366,7 +366,15 @@
       window.showToast('Pendaftaran berhasil! Berikutnya masuk dengan nomor WhatsApp-mu.', 'party-popper');
       if (res.token && res.member) { _lsSet(MEMBER_TOKEN_KEY, res.token); window.setPublicMember(res.member); window.loadPublicData(); }
       else window.navigate('public-login');
-    }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal mendaftar: ')); });
+    }).catch(function (err) {
+      done();
+      if (/Coach sedang penuh/.test(String(err && err.message || ''))) {   // Fase AF: batas klien paket coach
+        window.closeModal();
+        window.showWaPrompt(window.waUrl(window.coachPhoneById(data.coachId), 'Halo Coach, saya ' + data.name + ' ingin mendaftar PT (' + pkgName + '). Apakah masih ada tempat?'), 'Coach sedang penuh. Tanyakan tempat kosong langsung ke coach lewat WhatsApp.');
+        return;
+      }
+      window.showToast(waitErr(err, 'Gagal mendaftar: '));
+    });
   };
 
   // Halaman profil coach: dipakai portal klien dan pratinjau panel ("Lihat seperti klien").
