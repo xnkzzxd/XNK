@@ -1288,3 +1288,14 @@ test('paket & fitur: lifetime membekukan daftar fitur saat simpan pertama', () =
   const w = a.st.plans.at(-1);
   assert.ok(!w.features.includes('fiturbaru'), 'later features stay locked for lifetime buyers');
 });
+
+test('paket & fitur: ganti paket dari dialog — cara bayar tetap, harga dari proposal, hubPlan paket baru', () => {
+  const { e, a } = subEnv();
+  e.call('pusatSubSave', e.tok, 'claudia', { tier: 'starter', cycle: 'tahunan', due: wib(100) });
+  const r = e.call('pusatPlanSave', e.tok, 'claudia', { tier: 'studio' });
+  assert.equal(r.ok, true, r.error);
+  const v = r.data.coaches.find(c => c.slug === 'claudia');
+  assert.deepEqual([v.sub.tier, v.sub.cycle, v.sub.price, v.sub.due], ['studio', 'tahunan', e.ctx.PUSAT_TIERS.studio.tahunan, wib(100)]);
+  assert.equal(a.st.plans.at(-1).tier, 'studio');
+  assert.match(e.call('pusatPlanSave', e.tok, 'claudia', { tier: 'emas' }).error, /Pilih paket/);
+});

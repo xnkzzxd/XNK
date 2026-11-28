@@ -15715,14 +15715,19 @@
     const fmt = function (d) { try { return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return d; } };
     const over = cl.max && cl.used > cl.max;
     const link = upgradeLink('');
+    const chips = function (list) { return '<div class="plan-chips">' + list.map(function (f) { return '<span class="plan-chip">' + icon('lock') + h(PLAN_LABEL[f]) + '</span>'; }).join('') + '</div>'; };
+    const offPro = off.filter(function (f) { return PLAN_STUDIO.indexOf(f) === -1; }), offStudio = off.filter(function (f) { return PLAN_STUDIO.indexOf(f) !== -1; });
+    const row = function (ic, t, bad) { return '<li' + (bad ? ' class="bad"' : '') + '>' + icon(ic) + '<span>' + t + '</span></li>'; };
     return '<div class="card-flat stack plan-card"><div class="plan-top"><p class="li-title">Paket Anda</p><span class="plan-tier">' + h(p.name || p.tier) + '</span></div>' +
       meter('Klien aktif', cl.used || 0, cl.max || 0) + meter('Coach', co.used || 0, co.max || 0) +
-      (warn ? '<p class="plan-warn">' + icon('info') + '<span>Paket ' + h(p.name) + ' berlaku penuh mulai <b>' + h(fmt(p.enforceFrom)) + '</b>.' +
-        (over ? ' Klien aktif sekarang ' + h(cl.used) + ', batasnya ' + h(cl.max) + ': sesudah tanggal itu klien baru belum bisa ditambah.' : '') +
-        (off.length ? ' Fitur yang belum termasuk akan disembunyikan; datanya tetap aman.' : '') + '</span></p>' : '') +
-      (off.length ? '<p class="li-sub">Belum termasuk: ' + h(off.map(function (f) { return PLAN_LABEL[f]; }).join(', ')) + '.</p>' : '<p class="li-sub">Semua fitur termasuk paket Anda.</p>') +
-      (link && (off.length || cl.max) ? '<a class="btn btn-primary btn-block" href="' + h(link) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Naik paket via WhatsApp</a>' : '') +
-      '<p class="li-sub">Klien aktif = masih punya sisa sesi atau booking; klien yang cuti tidak dihitung.</p></div>';
+      (warn ? '<ul class="plan-rows">' + row('calendar', 'Berlaku penuh <b>' + h(fmt(p.enforceFrom)) + '</b>') +
+        (over ? row('users', 'Klien aktif ' + h(cl.used) + ' · batas ' + h(cl.max) + ' · klien baru ditahan', true) : '') +
+        (off.length ? row('eye-off', 'Fitur di luar paket disembunyikan · data aman') : '') + '</ul>' : '') +
+      (offPro.length ? '<p class="plan-cap">Ada di Pro</p>' + chips(offPro) : '') +
+      (offStudio.length ? '<p class="plan-cap">Ada di Studio</p>' + chips(offStudio) : '') +
+      (!off.length ? '<p class="plan-cap">Semua fitur termasuk</p>' : '') +
+      (link && (off.length || cl.max) ? '<a class="btn btn-primary btn-block plan-up" href="' + h(link) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Naik paket via WhatsApp</a>' : '') +
+      '<p class="plan-foot">' + icon('info') + 'Klien cuti tidak dihitung</p></div>';
   };
 })();
 </script>

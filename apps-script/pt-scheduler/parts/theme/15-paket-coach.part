@@ -1,6 +1,6 @@
 /* Fase AF: paket coach (kartu Paket Anda, menu terkunci, lembar Tersedia di Pro) */
 .plan-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.plan-tier { font-weight: 800; font-size: var(--fs-lg, 1.1rem); }
+.plan-tier { font-weight: 800; }
 .plan-m { display: grid; gap: 6px; }
 .plan-mh { display: flex; justify-content: space-between; gap: 12px; font-size: var(--fs-sm); color: var(--fg-muted); }
 .plan-mh b { color: var(--fg); font-variant-numeric: tabular-nums; }
@@ -12,4 +12,15 @@
 .nav-item.nav-locked { color: var(--fg-muted); opacity: .6; }
 .plan-pill { margin-left: auto; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; font-size: .7rem; font-weight: 700; line-height: 1.5; }
 .cp-tab.tab-locked { opacity: .5; }
+.plan-tier { padding: 2px 12px; border-radius: 999px; background: var(--fg); color: var(--bg); font-size: var(--fs-sm); }
+.plan-rows { list-style: none; margin: 0; padding: 10px 12px; display: grid; gap: 8px; border-radius: 12px; background: color-mix(in srgb, var(--fg) 6%, transparent); font-size: var(--fs-sm); }
+.plan-rows li { display: flex; gap: 8px; align-items: center; }
+.plan-rows li.bad { color: var(--danger); }
+.plan-rows svg, .plan-foot svg { flex: none; width: 16px; height: 16px; }
+.plan-cap { margin: 4px 0 0; font-size: var(--fs-xs, .78rem); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-muted); }
+.plan-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.plan-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--fg) 14%, transparent); font-size: var(--fs-sm); color: var(--fg-muted); }
+.plan-chip svg { width: 13px; height: 13px; }
+.plan-up { text-decoration: none; }
+.plan-foot { display: flex; gap: 6px; align-items: center; margin: 0; font-size: var(--fs-xs, .78rem); color: var(--fg-muted); }
 </style>

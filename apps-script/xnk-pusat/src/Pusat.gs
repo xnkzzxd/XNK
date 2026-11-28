@@ -1616,6 +1616,7 @@ function planView_(slug, s) {
     usage: live ? { clients: live.clients || null, coaches: live.coaches || null } : (p.pushed && p.pushed.usage) || null,
     pushed: p.pushed ? { at: p.pushed.at, error: p.pushed.error || '' } : null,
     labels: PUSAT_PLAN_LABELS, features: PUSAT_PLAN_FEATURES,
+    tiers: PUSAT_PLAN_TIER, cycle: (s || subState_(slug)).cycle || '',
   };
 }
 
@@ -1631,7 +1632,17 @@ function pusatPlanSave(token, slug, data) {
   if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
   if (outState_(slug)) throw new Error('Coach ini sudah keluar. Tekan "Aktifkan lagi" dulu.');
   data = data && typeof data === 'object' ? data : {};
-  var s = subState_(slug), base = PUSAT_PLAN_TIER[s.tier];
+  var s = subState_(slug);
+  // Ganti paket dari dialog: cara bayar tetap, harga ikut proposal untuk paket baru (sama seperti Langganan).
+  if (data.tier != null && data.tier !== s.tier) {
+    if (!PUSAT_PLAN_TIER[data.tier]) throw new Error('Pilih paket Starter, Pro atau Studio.');
+    s.tier = data.tier; s.plan = planOf_(s.tier, s.cycle || 'bulanan'); s.cycle = s.cycle || 'bulanan';
+    s.price = PUSAT_TIERS[s.tier][s.cycle];
+    if (s.plan === 'bulanan' && !s.due) s.due = addMonth_(todayWib_());
+    subSave_(slug, s);
+    var pp = planState_(slug); delete pp.features; planSave_(slug, pp);   // daftar beku lifetime ikut paket baru
+  }
+  var base = PUSAT_PLAN_TIER[s.tier];
   if (!base) throw new Error('Pilih paket Starter, Pro atau Studio di Langganan dulu.');
   var p = planState_(slug);
   var lifetime = s.cycle === 'lifetime' || s.cycle === 'putus';
@@ -1659,6 +1670,7 @@ function pusatPlanSave(token, slug, data) {
     p.enforceFrom = d;
   }
   planSave_(slug, p);
+  subSync_(slug, all[slug], false);
   planSync_(slug, all[slug], false);
   return pusatOverview(token);
 }
