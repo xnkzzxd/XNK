@@ -190,3 +190,16 @@ test('getMyCoach(coachId) returns that active coach and its own status; an unkno
   env.call('addCoachTimeOff', t, { coachId: 'C-1', from: new Date().toISOString().slice(0, 10), to: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10) });
   assert.equal(env.call('getCoachStatus', 'C-1').state, 'cuti');
 });
+
+test('owner sets the coach order; the public list follows it and unknown ids are refused', () => {
+  const env = seededEnv();
+  const t = env.adminToken();
+  const { id } = env.call('saveCoach', t, PROFILE);
+  assert.deepEqual(publicIds(env), ['C-1', id]);
+  env.call('setCoachOrder', t, [id, 'C-1']);
+  assert.deepEqual(publicIds(env), [id, 'C-1']);
+  assert.deepEqual(env.call('getCoachesAdmin', t).coaches.map(c => c.id), [id, 'C-1']);
+  assert.throws(() => env.call('setCoachOrder', t, ['X-9']), /Coach tidak ditemukan\./);
+  const { id: id3 } = env.call('saveCoach', t, Object.assign({}, PROFILE, { name: 'Coach Tiga', phone: '6281200000099' }));
+  assert.deepEqual(publicIds(env), [id, 'C-1', id3]);
+});

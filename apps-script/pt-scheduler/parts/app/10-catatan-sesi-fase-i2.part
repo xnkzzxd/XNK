@@ -152,6 +152,20 @@
     optimistic({ q: { mode: 'admin', fn: 'setSelfCoach', args: [id] }, ok: 'Ditandai sebagai "Ini saya".', label: 'Ini saya',
       then: function () { Promise.resolve(reloadCoaches()).then(function () { if (ui.detail === 'coach:' + id) window.openCoachProfile(id); }).catch(function () {}); } });
   };
+  // Urutan coach: khusus pemilik (server menolak token coach). Daftar coach di landing & portal ikut urutan ini.
+  window.moveCoachUI = function (id, dir) {
+    const ids = coachList().map(function (x) { return String(x.id); });
+    const i = ids.indexOf(String(id)), j = i + dir;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    const before = window.coachesAll.slice();
+    ids.splice(j, 0, ids.splice(i, 1)[0]);
+    window.coachesAll.sort(function (a, b) { return ids.indexOf(String(a.id)) - ids.indexOf(String(b.id)); });
+    window.coaches = window.coachesAll.filter(function (c) { return c.aktif; });
+    window.updateCoachUI(); window.openCoachProfile(id);
+    optimistic({ q: { mode: 'admin', fn: 'setCoachOrder', args: [ids] }, ok: 'Urutan coach disimpan.', label: 'Urutan coach',
+      undo: function () { window.coachesAll = before; window.coaches = before.filter(function (c) { return c.aktif; }); window.updateCoachUI(); },
+      then: function () { saveAdminCache(); } });
+  };
   window.updateCoachUI = function () { if (window.currentView === 'coaches') renderView('coaches', { animate: false }); };
 
   window.openCoachProfile = function (id) {
@@ -173,6 +187,9 @@
       (window.isCoachRole() ? '' : '<button type="button" class="btn btn-outline" onclick="window.openEditCoachModal(\'' + h(c.id) + '\')">' + icon('pencil') + 'Ubah</button>') + '</div>' +
       (window.isCoachRole() ? '' : '<button type="button" class="btn btn-outline btn-block" onclick="window.coachPinOpen(\'' + h(c.id) + '\')">' + icon('key-round') + (c.hasPin ? 'Ganti PIN login coach' : 'Buat PIN login coach') + '</button>') +
       (window.isCoachRole() ? '</div>' : (c.id === window.coachSelfId ? '<button type="button" class="btn btn-secondary btn-block" onclick="window.openCoachPreview()">' + icon('eye') + 'Lihat seperti klien</button>' : '') +
+      (coachList().length > 1 ? (function () { const ix = coachList().findIndex(function (x) { return String(x.id) === String(c.id); }), n = coachList().length;
+        return '<div class="btn-row">' + (ix > 0 ? '<button type="button" class="btn btn-outline" onclick="window.moveCoachUI(\'' + h(c.id) + '\',-1)">' + icon('arrow-up') + 'Naikkan urutan</button>' : '') +
+          (ix < n - 1 ? '<button type="button" class="btn btn-outline" onclick="window.moveCoachUI(\'' + h(c.id) + '\',1)">' + icon('arrow-down') + 'Turunkan urutan</button>' : '') + '</div>'; })() : '') +
       (c.aktif !== false && c.id !== window.coachSelfId ? '<button type="button" class="btn btn-outline btn-block" onclick="window.setSelfCoachUI(\'' + h(c.id) + '\')">' + icon('user-check') + 'Jadikan "Ini saya"</button>' : '') +
       '<button type="button" class="btn btn-outline btn-block" onclick="window.setCoachActiveUI(\'' + h(c.id) + '\',' + (c.aktif === false ? 'true' : 'false') + ')">' + icon('power') + (c.aktif === false ? 'Aktifkan coach' : 'Nonaktifkan coach') + '</button>' +
       '<button type="button" class="btn btn-ghost btn-block" onclick="window.deleteCoachConfirm(\'' + h(c.id) + '\')">' + icon('trash-2') + 'Hapus coach</button></div>');

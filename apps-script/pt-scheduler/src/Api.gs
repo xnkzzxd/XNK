@@ -29,7 +29,7 @@ function _apiTable_() {
     hubSiteUrl: hubSiteUrl,
     hubReadonly: hubReadonly,
     hubPlan: hubPlan,
-    // admin: admin token (147)
+    // admin: admin token (148)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -91,6 +91,7 @@ function _apiTable_() {
     deleteCoachTimeOff: deleteCoachTimeOff,
     getCoachesAdmin: getCoachesAdmin,
     setCoachActive: setCoachActive,
+    setCoachOrder: setCoachOrder,
     setSelfCoach: setSelfCoach,
     assignUnassignedToSelf: assignUnassignedToSelf,
     addMember: addMember,
@@ -288,6 +289,7 @@ function _apiWrites_() {
     addCoachTimeOff: 1,
     deleteCoachTimeOff: 1,
     setCoachActive: 1,
+    setCoachOrder: 1,
     setSelfCoach: 1,
     assignUnassignedToSelf: 1,
     addMember: 1,
