@@ -8635,7 +8635,8 @@ function _coachProfilePage_(coachId) {
     solo: _activeCoaches_().length === 1,
     status: getCoachStatus(self ? self.id : ''),
     testimonials: getPublicTestimonials().slice(0, 3),
-    stats: (function() { const st = getLandingStats(); return { clients: st.totalClients || 0, sessions: st.completedSessions || 0, rating: st.avgRating }; })(),
+    // Angka total (bukan data klien) dari cache bersama: getLandingStats membaca seluruh sheet Schedules tiap kali.
+    stats: (function() { const st = _sharedCached_('landingStats', getLandingStats) || {}; return { clients: st.totalClients || 0, sessions: st.completedSessions || 0, rating: st.avgRating }; })(),
     rescheduleCutoffHours: _rescheduleCutoff_()
   };
 }

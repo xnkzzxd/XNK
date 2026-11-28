@@ -459,7 +459,7 @@
     adminCall('saveProgramTemplate', $('prg-tpl-name').value, pfCollect(), { jelajahi: $('prg-tpl-pub').checked }).then(function (r) {
       done(); window.showToast('Template "' + r.name + '" disimpan.');
       return adminCall('getProgramTemplates').then(function (list) {
-        progTemplates = list || [];
+        progTemplates = list || []; progTplAt = Date.now();
         $('prg-tpl').innerHTML = '<option value="">Pilih template…</option>' + progTemplates.map(t => '<option value="' + h(t.name) + '"' + (t.name === r.name ? ' selected' : '') + '>' + h(t.name) + ' (' + t.days + ' hari)</option>').join('');
         $('prg-tpl-del').classList.remove('hide');
       });

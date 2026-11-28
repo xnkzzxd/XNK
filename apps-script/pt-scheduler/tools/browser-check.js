@@ -491,6 +491,72 @@ async function contrastReport(page) {
     await context.close(); await reload.context.close(); await revoked.context.close();
   })().catch(sectionCrash);
 
+  // ── Buka tanpa menunggu (2026-11-28): layar yang sering dibuka tidak memanggil server lagi ──────────
+  console.log('Buka tanpa menunggu (panggilan server saat dibuka lagi)');
+  await (async () => {
+    const env = richEnv();
+    const adminTok = env.adminToken(), memberTok = env.memberToken(KEY_A);
+    const calls = [];
+    const since = (mark, fn) => calls.slice(mark).filter(x => x === fn).length;
+    const adm = await openPage(browser, env, '/Index', calls, { xnk_admin_token: adminTok }, { viewport: MOBILE, wait: 2500 });
+    const page = adm.page;
+    await page.evaluate(() => window.navigate('settings'));
+    await page.waitForTimeout(1200);
+    let m = calls.length;
+    await page.evaluate(() => window.settingsOpen('pengingat'));
+    await page.waitForTimeout(1200);
+    check(since(m, 'previewReminderText') === 0, 'Pengingat opens with no previewReminderText call (was one per reminder type)');
+    const pv = await page.$$eval('#settings-body .wa-bubble', els => els.map(e => e.textContent.trim()));
+    check(pv.length >= 10 && pv.every(t => t && t !== '…'), 'every reminder preview is filled at once (' + pv.length + ')');
+    await page.evaluate(() => { const el = document.getElementById('set-job-sesi-besok-tpl'); el.value = 'Halo {nama}, jam {jam}.'; el.dispatchEvent(new Event('input', { bubbles: true })); });   // di dalam lipatan tertutup
+    await page.waitForTimeout(1200);
+    check((await page.textContent('#pv-sesi-besok')).includes('jam 07:00'), 'a newly typed template is still previewed by the server');
+    m = calls.length;
+    await page.evaluate(() => window.settingsOpen('paket'));
+    await page.waitForTimeout(900);
+    check(since(m, 'getPriceListAdmin') === 0 && await page.locator('#pkg-root .pkg-main').count() > 0, 'Paket & Harga shows the prefetched packages with no new call');
+    await page.evaluate(() => window.settingsOpen('latihan'));
+    await page.waitForTimeout(1500);
+    m = calls.length;
+    await page.evaluate(() => window.settingsOpen('latihan'));
+    await page.waitForTimeout(900);
+    check(since(m, 'getGymCatalog') + since(m, 'getManualExercises') === 0 && await page.locator('#gym-cat .li-sub:has-text("Memuat")').count() === 0, 'Latihan & Alat opened again: drawn from memory, no call');
+    await page.evaluate(() => window.navigate('dashboard'));
+    await page.evaluate(() => window.openHoursPage());
+    await page.waitForTimeout(1200);
+    m = calls.length;
+    await page.evaluate(() => { window.closeDetail(); window.openHoursPage(); });
+    check(await visible(page, '#detail-panel.open') && (await page.textContent('#detail-body')).includes('Jam kerja'), 'Jam kerja & cuti opened again shows at once');
+    await page.waitForTimeout(800);
+    check(since(m, 'getCoachAvailability') === 0, 'Jam kerja & cuti opened again within a minute makes no call');
+    await page.evaluate(() => window.closeDetail());
+    await page.evaluate(() => window.openProgramEditor('PT-A'));
+    await page.waitForTimeout(1200);
+    await page.evaluate(() => window.closeModal());
+    await page.waitForTimeout(500);
+    m = calls.length;
+    await page.evaluate(() => window.openProgramEditor('PT-A'));
+    await page.waitForTimeout(800);
+    check(since(m, 'getProgramTemplates') === 0, 'program editor opened again makes no getProgramTemplates call');
+    noErrors(adm.errors);
+    await adm.context.close();
+
+    const pcalls = [];
+    const pub = await openPage(browser, env, '/Index?view=public', pcalls, { xnk_member_token: memberTok }, { viewport: MOBILE, wait: 2000 });
+    const cid = await pub.page.evaluate(() => String((window.coaches[0] || {}).id || ''));
+    await pub.page.evaluate(id => window.openCoachSheet(id), cid);
+    check(!(await pub.page.textContent('#coach-sheet-body')).includes('Memuat profil'), 'coach profile draws at once from the coach list (no "Memuat profil…")');
+    await pub.page.waitForTimeout(1200);
+    await pub.page.evaluate(() => window.closeModal());
+    await pub.page.waitForTimeout(500);
+    const pm = pcalls.length;
+    await pub.page.evaluate(id => window.openCoachSheet(id), cid);
+    await pub.page.waitForTimeout(800);
+    check(pcalls.slice(pm).filter(x => x === 'getMyCoach').length === 0 && (await pub.page.textContent('#coach-sheet-body')).length > 20, 'coach profile opened again within 5 minutes makes no call');
+    noErrors(pub.errors);
+    await pub.context.close();
+  })().catch(sectionCrash);
+
   // ── Fase AD (T-2403): tombol ? di tiap ukuran tubuh → lembar cara mengukur, kembali ke form ───────
   console.log('Cara ukur (portal + assessment coach)');
   await (async () => {

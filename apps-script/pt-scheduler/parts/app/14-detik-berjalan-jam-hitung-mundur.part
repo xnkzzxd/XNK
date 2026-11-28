@@ -964,9 +964,11 @@
     adminCall('setGymExerciseActive', id, on).then(function (d) { gymSt.data = d; gymRender(); })
       .catch(function (e) { showToast(waitErr(e)); gymRender(); });
   };
+  // Dibuka lagi dalam 5 menit: tampil dari memori tanpa panggilan (simpan / nyalakan alat sudah mengembalikan data terbaru).
   function exAliasLoad() {
+    if (gymSt.data && exAl.data) { gymRender(); exAliasRender(); gymSumRender(); if (Date.now() - (exAl.at || 0) < 300000) return; }
     exEnsure().catch(function () {}).then(function () { gymLoad(); return adminCall('getManualExercises'); })
-      .then(function (d) { exAl.data = d; exAliasRender(); gymSumRender(); })
+      .then(function (d) { exAl.data = d; exAl.at = Date.now(); exAliasRender(); gymSumRender(); })
       .catch(function (e) { const el = $('exal-list'); if (el) el.innerHTML = '<span class="li-sub">' + h(e.message || 'Gagal memuat.') + '</span>'; });
   }
   function exAliasRender() {
@@ -1027,8 +1029,12 @@
   }
   function finSettingsLoad() {
     if (!finOn()) return;
-    adminCall('getFinanceCategories').then(function (c) { fin.cats = c; finCatsRender(); }).catch(finErr);
-    adminCall('getCoachesAdmin').then(function (r) { fin.coaches = r.coaches; finShareRender(); }).catch(finErr);
+    // Kategori (juga dari halaman Keuangan) dan bagi hasil coach: dari memori bila sudah ada dan < 5 menit.
+    const fresh = Date.now() - (fin.setAt || 0) < 300000;
+    if (fin.cats) finCatsRender();
+    if (fin.coaches) finShareRender();
+    if (!fin.cats || !fresh) adminCall('getFinanceCategories').then(function (c) { fin.cats = c; finCatsRender(); }).catch(finErr);
+    if (!fin.coaches || !fresh) adminCall('getCoachesAdmin').then(function (r) { fin.coaches = r.coaches; fin.setAt = Date.now(); finShareRender(); }).catch(finErr);
   }
   function finCatsRender() {
     const el = $('fin-set-cats');
@@ -1120,7 +1126,12 @@
       undo: function () { fin.cats = before; finCatsRender(); } });
   };
   window.finShareSave = function (id, btn) {
-    optimistic({ q: { mode: 'admin', fn: 'saveCoachShare', args: [id, $('fin-sh-t-' + id).value, finNum($('fin-sh-v-' + id).value)] }, ok: 'Bagi hasil tersimpan.', label: 'Bagi hasil coach' });
+    const tipe = $('fin-sh-t-' + id).value, val = finNum($('fin-sh-v-' + id).value);
+    // Salinan di memori ikut isian, supaya bagian ini dibuka lagi tanpa panggilan tetap menampilkan angka baru.
+    const c = (fin.coaches || []).find(function (x) { return String(x.id) === String(id); }), before = c ? { t: c.shareType, v: c.shareValue } : null;
+    if (c) { c.shareType = tipe; c.shareValue = val; }
+    optimistic({ q: { mode: 'admin', fn: 'saveCoachShare', args: [id, tipe, val] }, ok: 'Bagi hasil tersimpan.', label: 'Bagi hasil coach',
+      undo: function () { if (c && before) { c.shareType = before.t; c.shareValue = before.v; finShareRender(); } } });
   };
   window.finSync = function (btn) {
     const done = busy(btn, 'Menyinkronkan…');
