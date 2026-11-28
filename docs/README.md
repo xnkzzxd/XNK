@@ -30,7 +30,7 @@ Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique
 | AD | Coach kit: client hold (Cuti / Sakit / Berhenti), measurement guide + Pinggul, coach logger upgrade, PDF report on demand | [coachkit/](coachkit/) | T-2400+ | built (2026-11-26; T-2409b dropped) |
 | AE | Login per coach: own PIN, own clients, own sessions, own finance; portal picks a coach first | [akses/](akses/) | T-2500+ | built, waves 1–2 (2026-11-27) |
 | AF | Coach plans Starter / Pro / Studio: features and limits set in XNK HQ, enforced per coach | [plan/](plan/) | T-2600+ | built (2026-11-28) |
-| AG | Coach posters 9:16 / 4:5: promo, free slots, profile, testimonial, coaching results, client story; XNK Coach poster for the owner | [poster/](poster/) | T-2700+ | built (2026-11-28; owner review T-2707 open) |
+| AG | Coach posters 9:16 / 4:5: promo, free slots, profile, testimonial, coaching results, client story; XNK Coach poster for the owner | [poster/](poster/) | T-2700+ | built (2026-11-28, approved by the owner) |
 | — | Reminder texts: tone rules and sources of the science tips | [reminder/Sumber.md](reminder/Sumber.md) | — | built (2026-11) |
 
 Notes

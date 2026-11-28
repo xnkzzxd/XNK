@@ -9,5 +9,5 @@ Status: `[ ]` not started · `[~]` in progress · `[x]` done · `[-]` deferred o
 - [x] T-2704 Editor and seven poster layouts (`parts/app/27-poster.part`, `parts/theme/16-poster.part`), entry points (Coach → Profil, **+** sheet, client ⋯).
 - [x] T-2705 Library: brand = coach, small "Didukung XNK" mark, no XNK Coach poster (`build-lib.js`, tests, `check-compat.js`).
 - [x] T-2706 Checks: `tests/poster.test.js`, `tools/poster-check.js` (CI).
-- [ ] T-2707 Owner review of the editor and sample posters from screenshots (panel UI rule) before merge.
+- [x] T-2707 Owner review: approved 2026-11-28 after two redesigns (xnk.my.id look, then the black "Sesi berikutnya" signature card).
 - [ ] T-2708 Later, if wanted: motion video like share cards, EN copy, more layouts per type.
