@@ -645,7 +645,9 @@ function landingLd(landing) {
   const ld = [{ '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'XNK', url: HUB_ORIGIN + '/', description: desc, inLanguage: 'id',
     applicationCategory: 'BusinessApplication', operatingSystem: 'Web, Android, Windows, macOS', image: HUB_ORIGIN + '/img/og.jpg', offers: harga.offers(HUB_ORIGIN + '/') }];
   ld.push({ '@context': 'https://schema.org', '@type': 'Organization', '@id': HUB_ORIGIN + '/#org', name: 'XNK', url: HUB_ORIGIN + '/',
-    logo: HUB_ORIGIN + '/img/icon-512.png', areaServed: 'ID' },
+    logo: HUB_ORIGIN + '/img/icon-512.png', areaServed: 'ID',
+    founder: { '@type': 'Person', name: 'Yandura Jizdan', homeLocation: { '@type': 'City', name: 'Purwokerto' } },
+    address: { '@type': 'PostalAddress', addressLocality: 'Purwokerto', addressRegion: 'Jawa Tengah', addressCountry: 'ID' } },
   { '@context': 'https://schema.org', '@type': 'WebSite', '@id': HUB_ORIGIN + '/#website', name: 'XNK', url: HUB_ORIGIN + '/', inLanguage: 'id', publisher: { '@id': HUB_ORIGIN + '/#org' } });
   if (faq.length) ld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: faq });
   if (!landing.includes('</head>')) throw new Error('build-hub: </head> tidak ada di hub-site/index.html');
@@ -678,7 +680,7 @@ function infoLd(c, url, desc, logo) {
 function llmsTxt(hub, desc) {
   const active = hub.coaches.filter(c => !c.inactive);
   const L = ['# XNK', '', '> ' + desc, '',
-    'XNK adalah aplikasi web untuk personal trainer di Indonesia dan klien mereka: jadwal dan booking sesi, program latihan dan pencatat latihan, gizi dan catatan makan, progres tubuh, laporan PDF, keuangan, serta pengingat. Klien memakai portal di ponsel; coach memakai panel di ponsel atau komputer. Bahasa: Indonesia.', '',
+    'XNK dibuat oleh Yandura Jizdan di Purwokerto, Jawa Tengah. XNK adalah aplikasi web untuk personal trainer di Indonesia dan klien mereka: jadwal dan booking sesi, program latihan dan pencatat latihan, gizi dan catatan makan, progres tubuh, laporan PDF, keuangan, serta pengingat. Klien memakai portal di ponsel; coach memakai panel di ponsel atau komputer. Bahasa: Indonesia.', '',
     '## Halaman utama', '', `- [XNK](${HUB_ORIGIN}/): fitur, harga paket coach, demo, dan pendaftaran lewat WhatsApp`];
   if (active.length) {
     L.push('', '## Coach di XNK', '');
