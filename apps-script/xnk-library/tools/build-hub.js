@@ -200,10 +200,12 @@ function readHub(cfg, opts) {
       const u = String(c.url).trim();
       if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s'"<>\\]*)?$/i.test(u)) throw new Error(`hub.json, "${slug}": url harus link https:// situs coach.`);
       out.url = u;
-      if (c.klienUrl != null && c.klienUrl !== '') {
-        const k = String(c.klienUrl).trim();
-        if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s'"<>\\]*)?$/i.test(k)) throw new Error(`hub.json, "${slug}": klienUrl harus link https:// portal klien.`);
-        out.klienUrl = k;
+      // klienUrl = /<slug>/klien/, panelUrl = /<slug>/, infoUrl = /<slug>/info/ (alih langsung; tanpa = halaman info hub).
+      for (const k of ['klienUrl', 'panelUrl', 'infoUrl']) {
+        if (c[k] == null || c[k] === '') continue;
+        const v = String(c[k]).trim();
+        if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s'"<>\\]*)?$/i.test(v)) throw new Error(`hub.json, "${slug}": ${k} harus link https://.`);
+        out[k] = v;
       }
     }
     return out;
@@ -513,8 +515,9 @@ function build(cfg, opts) {
     if (c.inactive) { Object.assign(files, inactiveFiles(c, hub.contact)); continue; }
     if (c.url) {
       if (c.logoFile) files[`${c.slug}/logo.${c.logoFile.ext}`] = c.logoFile.body;
-      files[c.slug + '/info/index.html'] = infoPage(c);
-      for (const sub of ['', 'klien/']) { const to = sub && c.klienUrl ? c.klienUrl : c.url; files[`${c.slug}/${sub}index.html`] = cspStatic(['<!doctype html>', '<html lang="id">', '<head>',
+      if (!c.infoUrl) files[c.slug + '/info/index.html'] = infoPage(c);
+      for (const sub of ['', 'klien/'].concat(c.infoUrl ? ['info/'] : [])) {
+        const to = sub === 'klien/' ? (c.klienUrl || c.url) : sub === 'info/' ? c.infoUrl : (c.panelUrl || c.url); files[`${c.slug}/${sub}index.html`] = cspStatic(['<!doctype html>', '<html lang="id">', '<head>',
         '<meta charset="utf-8">', '<meta name="viewport" content="width=device-width, initial-scale=1">', '<meta name="robots" content="noindex">',
         `<meta http-equiv="refresh" content="0; url=${esc(to)}">`, `<title>${esc(c.brand)}</title>`, '</head>', '<body>',
         `<p style="font:16px/1.5 system-ui,sans-serif;text-align:center;padding:48px 16px"><a href="${esc(to)}">${esc(c.brand)}</a></p>`, '</body>', '</html>', ''].join('\n')); }
@@ -572,7 +575,7 @@ function build(cfg, opts) {
     // T-2260: tempat latihan (nama · kota) di bawah nama; data-city / data-q untuk cari dan saring kota di halaman.
     const low = s => s.toLowerCase();
     landing = landing.replace('<!--COACHES-->', listed.map(c =>
-      `<a class="card coach" href="/${c.slug}/info/" data-city="${c.place ? esc(low(c.place.city)) : ''}" data-q="${esc(low([c.brand, c.slug].concat(c.aliases || [], c.place ? [c.place.name, c.place.city] : []).join(' ')))}">` +
+      `<a class="card coach" href="${esc(c.infoUrl || `/${c.slug}/info/`)}" data-city="${c.place ? esc(low(c.place.city)) : ''}" data-q="${esc(low([c.brand, c.slug].concat(c.aliases || [], c.place ? [c.place.name, c.place.city] : []).join(' ')))}">` +
       `<span class="av${c.accent ? ' acc-' + c.accent : ''}${c.logoFile ? ' logo' : ''}" aria-hidden="true">` +
       (c.logoFile ? `<img src="/${c.slug}/logo.${c.logoFile.ext}" alt="" width="48" height="48">` : esc(c.brand.trim().charAt(0).toUpperCase() || '?')) + '</span>' +
       `<div><b>${esc(c.brand)}</b>` +
@@ -730,11 +733,11 @@ function cityPages(hub) {
     const url = `${HUB_ORIGIN}/personal-trainer/${k}/`;
     const title = `Personal Trainer ${city} · ${coaches.length} coach`;
     const desc = `Cari personal trainer di ${city}: ${coaches.map(c => c.brand).join(', ')}. Lihat tempat latihan, paket, harga, dan jam kosong, lalu daftar online.`;
-    const items = coaches.map(c => `<li><a href="/${esc(c.slug)}/info/"><b>${esc(c.brand)}</b><span>Personal trainer · ${esc(c.place.name)}, ${esc(city)}</span></a></li>`).join('\n');
+    const items = coaches.map(c => `<li><a href="${esc(c.infoUrl || `/${c.slug}/info/`)}"><b>${esc(c.brand)}</b><span>Personal trainer · ${esc(c.place.name)}, ${esc(city)}</span></a></li>`).join('\n');
     const body = `<nav class="crumb" aria-label="Remah roti"><a href="/">Beranda</a> › <a href="/personal-trainer/">Personal trainer</a> › ${esc(city)}</nav>\n` +
       `<h1>Personal Trainer di ${esc(city)}</h1>\n<p class="lead">${coaches.length} personal trainer di ${esc(city)}. Pilih coach untuk melihat tempat latihan, paket, harga, dan jam kosong.</p>\n<ul class="list">\n${items}\n</ul>`;
     const ld = [{ '@context': 'https://schema.org', '@type': 'ItemList', name: 'Personal Trainer ' + city, url,
-      itemListElement: coaches.map((c, i) => ({ '@type': 'ListItem', position: i + 1, url: `${HUB_ORIGIN}/${c.slug}/info/`, name: c.brand })) },
+      itemListElement: coaches.map((c, i) => ({ '@type': 'ListItem', position: i + 1, url: c.infoUrl || `${HUB_ORIGIN}/${c.slug}/info/`, name: c.brand })) },
     { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Beranda', item: HUB_ORIGIN + '/' },
       { '@type': 'ListItem', position: 2, name: 'Personal trainer', item: HUB_ORIGIN + '/personal-trainer/' },
@@ -783,7 +786,7 @@ function llmsTxt(hub, desc) {
     L.push('', '## Coach di XNK', '');
     for (const c of active) {
       const pl = c.place ? ` — ${c.place.name}, ${c.place.city}` : '';
-      L.push(`- [${c.brand}](${HUB_ORIGIN}/${c.slug}/info/): personal trainer${pl}; paket, harga, jam kosong, daftar online`);
+      L.push(`- [${c.brand}](${c.infoUrl || `${HUB_ORIGIN}/${c.slug}/info/`}): personal trainer${pl}; paket, harga, jam kosong, daftar online`);
     }
   }
   const g = cityGroups(hub), ks = Object.keys(g).sort();
@@ -803,7 +806,7 @@ function seoFiles(hub, desc) {
     .concat(...active.map(c => [`Disallow: /${c.slug}/`, `Allow: /${c.slug}/info/`]))
     .concat(['', `Sitemap: ${HUB_ORIGIN}/sitemap.xml`, '']).join('\n');
   const cities = Object.keys(cityGroups(hub)).sort();
-  const urls = [HUB_ORIGIN + '/'].concat(cities.length ? [HUB_ORIGIN + '/personal-trainer/'] : [], cities.map(k => `${HUB_ORIGIN}/personal-trainer/${k}/`), active.map(c => `${HUB_ORIGIN}/${c.slug}/info/`));
+  const urls = [HUB_ORIGIN + '/'].concat(cities.length ? [HUB_ORIGIN + '/personal-trainer/'] : [], cities.map(k => `${HUB_ORIGIN}/personal-trainer/${k}/`), active.filter(c => !c.infoUrl).map(c => `${HUB_ORIGIN}/${c.slug}/info/`));
   const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
     urls.map(u => `  <url><loc>${esc(u)}</loc></url>`).join('\n') + '\n</urlset>\n';
   return Object.assign({ 'robots.txt': robots, 'sitemap.xml': sitemap, 'llms.txt': llmsTxt(hub, desc) }, cityPages(hub));

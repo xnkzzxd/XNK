@@ -32,7 +32,7 @@ function verifySite(dir, cfg, opts) {
     const landing = read('index.html');
     for (const c of hub.coaches) {
       if (c.inactive && landing.includes(`href="/${c.slug}/info/"`)) problems.push(`Halaman depan masih menautkan coach tidak aktif /${c.slug}/info/.`);
-      if (!c.inactive && !landing.includes(`href="/${c.slug}/info/"`)) problems.push(`Halaman depan tidak menautkan /${c.slug}/info/.`);
+      if (!c.inactive && !c.infoUrl && !landing.includes(`href="/${c.slug}/info/"`)) problems.push(`Halaman depan tidak menautkan /${c.slug}/info/.`);
     }
     try { JSON.parse(read('_hub/versions.json')); } catch (e) { problems.push('_hub/versions.json bukan JSON.'); }
     for (const f of ['index.html', '404.html']) if (!read(f).includes('http-equiv="Content-Security-Policy"')) problems.push(`${f}: Content-Security-Policy tidak terpasang.`);

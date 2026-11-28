@@ -507,4 +507,9 @@ test('coach dengan situs sendiri (url): halaman info + pengalih, tanpa aplikasi'
   assert.ok(files['personal-trainer/purwokerto/index.html'].includes('/jizdan/info/'));
   assert.ok(files['index.html'].includes('xnkbooking.my.id'));
   assert.throws(() => hub.build({ coaches: [{ slug: 'jizdan', brand: 'X', exec: PROD, url: 'http://x.id' }] }), /url/);
+  const b = hub.build({ coaches: [{ slug: 'jizdan', brand: 'Jizdan', exec: PROD, url: 'https://xnkbooking.my.id/', klienUrl: 'https://book.xnkbooking.my.id/', panelUrl: 'https://xnk.my.id/', infoUrl: 'https://xnkbooking.my.id/', place: { name: 'Wellness Gym', city: 'Purwokerto' } }] }).files;
+  assert.ok(b['jizdan/index.html'].includes('url=https://xnk.my.id/'));
+  assert.ok(b['jizdan/info/index.html'].includes('url=https://xnkbooking.my.id/') && b['jizdan/info/index.html'].includes('noindex'));
+  assert.ok(b['jizdan/klien/index.html'].includes('url=https://book.xnkbooking.my.id/'));
+  assert.ok(b['personal-trainer/purwokerto/index.html'].includes('href="https://xnkbooking.my.id/"') && !b['sitemap.xml'].includes('/jizdan/'));
 });
