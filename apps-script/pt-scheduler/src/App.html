@@ -264,7 +264,14 @@
   // Nomor WA coach yang dipilih (id); kosong/tidak ketemu → nomor kontak umum (mode solo).
   window.coachPhoneById = function (id) {
     const c = id ? (window.coaches || []).find(function (x) { return x && String(x.id) === String(id) && x.phone; }) : null;
-    return c ? sanitizePhone(c.phone) : window.coachContactNumber();
+    return c ? window.coachWa(c.phone) : window.coachContactNumber();
+  };
+  // Nomor WA yang dihubungi klien untuk seorang coach. Ada nomor kontak tetap (xnk.my.id: nomor pemilik) = selalu itu,
+  // supaya pesan klien tidak nyasar ke nomor pribadi coach lain; tanpa itu (situs coach di hub) = nomor coach tersebut.
+  window.coachWa = function (phone) {
+    const fixed = sanitizePhone(COACH_WA_NUMBER || '');
+    if (fixed.length >= 10) return fixed;
+    return sanitizePhone(phone || '') || window.coachContactNumber();
   };
   window.coachContactNumber = function () {
     const fixed = sanitizePhone(COACH_WA_NUMBER || '');
@@ -7498,7 +7505,7 @@
     });
     const text = 'Halo Coach, saya ' + (me.name || '') + '. Latihan ' + (it.hari || 'hari ini') + ' selesai' + face + '\n' + lines.join('\n') + (it.session && it.session.catatan ? '\nCatatan: ' + it.session.catatan : '');
     const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId));
-    window.sendToParentWA(coach ? coach.phone : window.coachContactNumber(), text);
+    window.sendToParentWA(window.coachWa(coach && coach.phone), text);
   };
 
   // ── Bagikan: kartu gambar (Phase T). Renderer ada di Bagikan.html; di sini hanya sumber data dan tombol. ──
@@ -8921,7 +8928,7 @@
   function renewCoachPhone() {
     const me = window.publicLoggedMember || {};
     const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId));
-    return coach ? coach.phone : window.coachContactNumber();
+    return window.coachWa(coach && coach.phone);
   }
   function renewText(pkgName, harga) {
     const me = window.publicLoggedMember || {};
@@ -9017,7 +9024,7 @@
     window.closeModal();
     renderRenewSlot();
     const coach = (window.coaches || []).find(c => String(c.id) === String(coachId));
-    window.showWaPrompt(window.waUrl(coach && coach.phone ? coach.phone : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
+    window.showWaPrompt(window.waUrl(coach && coach.phone ? window.coachWa(coach.phone) : renewCoachPhone(), renewText(p.namaPaket, p.harga)), 'Permintaan terkirim. Kirim pesan ke coach lewat WhatsApp.');
     // Antrean simpan (nomor pesanan + catatan Idem: kiriman ulang tidak membuat permintaan kedua). Salinan di perangkat
     // langsung ikut, jadi "Menunggu konfirmasi" tetap tampil saat aplikasi dibuka lagi.
     if (window.patchPortalMore) window.patchPortalMore('renewal', window.myRenewal);
@@ -10751,7 +10758,7 @@
       ? 'Halo Coach, saya ' + (me.name || '') + '. Saya mau perpanjang paket latihan.'
       : 'Halo Coach, saya ' + (me.name || '') + ' (member XNK).';
     const coach = window.coaches.find(c => String(c.id) === String(me.preferredCoachId));
-    window.sendToParentWA(coach ? coach.phone : window.coachContactNumber(), text);
+    window.sendToParentWA(window.coachWa(coach && coach.phone), text);
   };
 
   function weeklyBuckets(completed, joinDate) {
@@ -11150,7 +11157,7 @@
     const c = window.coaches.find(x => String(x.id) === String(id));
     if (!c) return;
     const me = window.publicLoggedMember;
-    window.sendToParentWA(c.phone, 'Halo ' + window.coachLabel(c.name) + ', saya ' + (me ? me.name : '') + ' ingin tanya program latihan' + (c.specialty ? ' ' + c.specialty : '') + '.');
+    window.sendToParentWA(window.coachWa(c.phone), 'Halo ' + window.coachLabel(c.name) + ', saya ' + (me ? me.name : '') + ' ingin tanya program latihan' + (c.specialty ? ' ' + c.specialty : '') + '.');
   };
 
   // ── Detik berjalan: jam & hitung mundur ────────────────────────────────────

@@ -264,7 +264,14 @@
   // Nomor WA coach yang dipilih (id); kosong/tidak ketemu → nomor kontak umum (mode solo).
   window.coachPhoneById = function (id) {
     const c = id ? (window.coaches || []).find(function (x) { return x && String(x.id) === String(id) && x.phone; }) : null;
-    return c ? sanitizePhone(c.phone) : window.coachContactNumber();
+    return c ? window.coachWa(c.phone) : window.coachContactNumber();
+  };
+  // Nomor WA yang dihubungi klien untuk seorang coach. Ada nomor kontak tetap (xnk.my.id: nomor pemilik) = selalu itu,
+  // supaya pesan klien tidak nyasar ke nomor pribadi coach lain; tanpa itu (situs coach di hub) = nomor coach tersebut.
+  window.coachWa = function (phone) {
+    const fixed = sanitizePhone(COACH_WA_NUMBER || '');
+    if (fixed.length >= 10) return fixed;
+    return sanitizePhone(phone || '') || window.coachContactNumber();
   };
   window.coachContactNumber = function () {
     const fixed = sanitizePhone(COACH_WA_NUMBER || '');
