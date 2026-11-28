@@ -3463,4 +3463,18 @@ details.cp-day[open] .cp-day-names { display: none; }
 .plan-fold > summary svg:last-child { transition: transform .15s; }
 .plan-fold[open] > summary svg:last-child { transform: rotate(180deg); }
 .plan-fold > .plan-chips { padding-bottom: 6px; }
+/* ── Fase AG: editor poster coach. Memakai kerangka editor kartu bagikan (.share-sheet, .sh-*); di sini hanya tambahannya. ── */
+.sh-btns #po-go { flex: 1; }
+@media (min-width: 768px) { .sh-btns #po-go { flex: none; min-width: 9rem; } }
+.po-msg { margin: 0; max-width: 28rem; text-align: center; font-size: var(--fs-sm); color: var(--fg-2); }
+.po-list { display: flex; flex-direction: column; border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+.po-li { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 10px 12px; text-align: left; color: var(--fg); background: transparent; border: 0; }
+.po-li + .po-li { border-top: 1px solid var(--border); }
+.po-li b { font-size: var(--fs-sm); }
+.po-li span { font-size: var(--fs-xs); color: var(--fg-muted); }
+.po-li.active { background: var(--surface-3); box-shadow: inset 3px 0 0 var(--fg); }
+.poster-sheet .field { display: flex; flex-direction: column; gap: 4px; }
+.poster-sheet .label { color: var(--fg-muted); }
+.po-consent { gap: 12px; margin-bottom: 12px; }
+@media (hover: hover) { .po-li:hover:not(.active) { background: var(--surface-3); } }
 </style>

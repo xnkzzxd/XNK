@@ -33,7 +33,7 @@ const ADMIN = [
   'previewReminderText', 'setMemberReminderPrefs',
   'getRenewalRequests', 'decideRenewal',
   'setClientHold', 'endClientHold', 'deleteClientHold', 'decideHoldRequest',
-  'saveExerciseNote', 'deleteWorkoutEntries', 'getWorkoutExerciseHistory', 'logClientFood', 'deleteClientFood', 'saveFoodFeedback', 'getMemberReport',
+  'saveExerciseNote', 'deleteWorkoutEntries', 'getWorkoutExerciseHistory', 'logClientFood', 'deleteClientFood', 'saveFoodFeedback', 'getMemberReport', 'getPosterData', 'getPosterResults', 'getPosterStory',
   'getMemberProgress', 'saveMemberMeasurement', 'deleteMemberMeasurement', 'getMemberProgressPhoto', 'getMemberShareData',
   'getPriceListAdmin', 'savePackage', 'setPackageActive', 'deletePackage', 'reorderPackages', 'getClassGroups',
   'setCoachPin', 'setMemberCoach', 'assignClientsToCoach',
@@ -109,6 +109,7 @@ const READ_OK = [
   'getMyContent', 'getMyProgram', 'getMyProgramProfile', 'getMyWorkout', 'getMyPackageEval', 'getMyHealthForm',
   'getMyAssessment', 'getMyProgress', 'markBadgesSeen', 'getMyRenewal', 'getMyProgressPhoto', 'getMyShareData',
   'getMyClassGroup', 'getMyBills', 'markGuideSeen', 'markNotifSeen', 'getWorkoutExerciseHistory', 'getMyReport', 'getMemberReport',
+  'getPosterData', 'getPosterResults', 'getPosterStory',
 ];
 
 module.exports = { WRITE, READ_OK, PUBLIC, ADMIN, MEMBER, OWNER, TRIGGER, NOT_API, PUBLIC_API, API_FUNCTIONS };

@@ -28,7 +28,7 @@ test('saveMyProfileCard stores to the caller only, returns the saved card and sh
   const env = seededEnv();
   const tok = env.memberToken(KEY_A);
   const out = j(env.call('saveMyProfileCard', tok, { panggilan: 'Ani', motto: 'Kuat dulu, kurus nanti.', aksen: 'biru', gaya: 'garis', stat: ['level', 'sesi', 'latihan', 'pr'] }));
-  assert.deepEqual(out, { panggilan: 'Ani', motto: 'Kuat dulu, kurus nanti.', aksen: 'biru', gaya: 'garis', stat: ['level', 'sesi', 'latihan', 'pr'], badge: [], foto: false });
+  assert.deepEqual(out, { panggilan: 'Ani', motto: 'Kuat dulu, kurus nanti.', aksen: 'biru', gaya: 'garis', stat: ['level', 'sesi', 'latihan', 'pr'], badge: [], foto: false, poster: false });
   assert.equal(cell(env, 'PT-A', 44), 'Ani');
   assert.equal(cell(env, 'PT-A', 45), 'Kuat dulu, kurus nanti.');
   assert.deepEqual(JSON.parse(cell(env, 'PT-A', 46)), { a: 'biru', g: 'garis', s: ['level', 'sesi', 'latihan', 'pr'], b: [], f: false });

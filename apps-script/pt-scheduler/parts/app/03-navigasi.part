@@ -603,6 +603,7 @@
       if (ok(b.renewals)) window.renewals = b.renewals;
       if (ok(b.finance)) finApplySettings(b.finance);
       if (b.shareEnabled === false || b.shareEnabled === true) window.shareOn = b.shareEnabled;
+      if (b.posterEnabled === false || b.posterEnabled === true) window.posterOn = b.posterEnabled;   // Fase AG
       if (ok(b.packageTrend)) { window._trendCache = window._trendCache || {}; window._trendCache[mo + '-' + yr] = b.packageTrend; }
       if (ok(b.hub)) { window._hub = b.hub; window._hubAt = Date.now(); }
       if (ok(b.memberVers)) { window.memberVers = b.memberVers; window.memberVersAt = Date.now(); }   // versi data per klien (salinan halaman klien)

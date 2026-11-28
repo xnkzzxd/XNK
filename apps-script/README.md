@@ -480,6 +480,13 @@ Pengaturan → **Keuangan** (mati sampai Anda menyalakannya):
 - **Riwayat latihan di halaman klien:** tombol hapus untuk satu hari latihan, dan **Riwayat lengkap gerakan ini** (setahun, semua set dan estimasi 1RM).
 - **Tab Gizi klien:** **Catat** untuk mencatatkan makanan klien (mis. dari foto di WhatsApp; ditandai "coach"), hapus catatan, **tanggapan harian** (Pas / Kurang / Lebih + catatan singkat yang terlihat klien di Makan), dan pilihan **7 hari / 31 hari** dengan kalender, rata-rata per minggu, dan makanan yang paling sering.
 
+## Poster coach (Fase AG, 2026-11)
+
+- **Coach → Profil → Buat poster**, atau tombol **+** → **Poster**. Ukuran **Story 9:16** atau **Feed 4:5**; gambar dibuat di HP/laptop dan tidak diunggah.
+- Jenis: **Promo paket** (1–3 paket dari daftar harga), **Slot minggu ini** (jam kosong 7 hari), **Profil coach**, **Testimoni** (hanya komentar yang diizinkan klien), **Hasil coaching** (jumlah sesi, klien, rating, rekor, kg/cm turun; tanpa nama klien), **Kisah klien** (hanya klien yang menyalakan izin di portal → Saya; nama depan dan angka, foto boleh dipilih dari HP), dan khusus xnk.my.id **XNK Coach** (harga paket XNK untuk coach lain).
+- Judul, teks kecil, ajakan, nomor WA, Instagram, dan QR bisa diubah; pilihan tersimpan di perangkat. Di situs coach (hub) ada tanda kecil "Didukung XNK" di pojok; di xnk.my.id tidak.
+- Matikan untuk semua: Pengaturan → Tampilan → **Poster coach**.
+
 ## Laporan PDF (Fase AD, 2026-11)
 
 - Tombol **Laporan PDF** ada di portal klien (halaman Progres dan Saya) dan di halaman klien panel (Ringkasan). Laporan **hanya dibuat saat tombol ditekan**, langsung di HP/laptop; tidak ada yang disimpan di server atau diunggah.

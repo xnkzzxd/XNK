@@ -1436,6 +1436,9 @@
         '<p class="hint">Langsung tersimpan. Gambar dibuat di HP dan tidak diunggah.</p>' +
         '<div class="field"><label class="label" for="set-share-qr">Alamat kode QR di kartu</label><div class="row" style="gap:8px"><input class="input grow" id="set-share-qr" type="url" inputmode="url" autocomplete="off" maxlength="200" placeholder="' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '" value="' + h(setState.data.shareQrUrl || '') + '">' +
         '<button type="button" class="btn btn-outline" onclick="window.setShareQr(this)">Simpan</button></div><p class="hint">QR mati bawaan; klien menyalakannya sendiri di kartu. Kosong = ' + h(setState.data.shareQrDefault || 'https://xnkbooking.my.id') + '.</p></div></div>' +
+        '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Poster coach</p><p class="li-sub">Coach membuat poster promosi 9:16 dan 4:5: paket, slot kosong, profil, testimoni, hasil coaching, kisah klien.</p></div>' +
+        '<label class="toggle"><input type="checkbox" id="set-poster" onchange="window.setPoster(this)" aria-label="Poster coach"' + (setState.data.posterEnabled !== false ? ' checked' : '') + '><span></span></label></div>' +
+        '<p class="hint">Langsung tersimpan. Gambar dibuat di perangkat dan tidak diunggah. Kisah klien hanya untuk klien yang memberi izin.</p></div>' +
         '<div class="card-flat stack"><div class="row-between"><div><p class="li-title">Siapkan data di latar</p><p class="li-sub">Server menyiapkan data panel dan halaman klien tiap 15 menit (05:00–22:00), jadi saat dibuka langsung cepat.</p></div>' +
         '<label class="toggle"><input type="checkbox" id="set-warm" onchange="window.setWarm(this)" aria-label="Siapkan data di latar"' + (setState.data.warmEnabled ? ' checked' : '') + '><span></span></label></div>' +
         '<p class="hint">Langsung tersimpan. Memakai kuota pemicu Google (±30 menit per hari).</p></div>' +
@@ -2770,6 +2773,7 @@
       if (ok(b.renewals)) window.renewals = b.renewals;
       if (ok(b.finance)) finApplySettings(b.finance);
       if (b.shareEnabled === false || b.shareEnabled === true) window.shareOn = b.shareEnabled;
+      if (b.posterEnabled === false || b.posterEnabled === true) window.posterOn = b.posterEnabled;   // Fase AG
       if (ok(b.packageTrend)) { window._trendCache = window._trendCache || {}; window._trendCache[mo + '-' + yr] = b.packageTrend; }
       if (ok(b.hub)) { window._hub = b.hub; window._hubAt = Date.now(); }
       if (ok(b.memberVers)) { window.memberVers = b.memberVers; window.memberVersAt = Date.now(); }   // versi data per klien (salinan halaman klien)
@@ -4001,6 +4005,7 @@
       else if (kind === 'client') window.openAddMemberModal();
       else if (kind === 'coach') window.openAddCoachModal();
       else if (kind === 'content') window.navigate('content');
+      else if (kind === 'poster') window.posterOpen();   // Fase AG
     }, 120);
   };
 
@@ -5571,6 +5576,7 @@
     if (window.coaches.length) {
       html += '<button type="button" class="card-flat list-item interactive" style="width:100%;margin-bottom:16px;text-align:left" onclick="window.openHoursPage()">' + icon('calendar-clock') + '<span class="grow"><span class="li-title" style="display:block">Jam kerja &amp; cuti</span><span class="li-sub">Atur jam tersedia dan hari libur</span></span>' + icon('chevron-right') + '</button>';
     }
+    if (window.posterOn !== false) html += '<button type="button" class="card-flat list-item interactive" id="coach-poster" style="width:100%;margin-bottom:16px;text-align:left" onclick="window.posterOpen()">' + icon('image') + '<span class="grow"><span class="li-title" style="display:block">Buat poster</span><span class="li-sub">Promo paket, slot kosong, profil, testimoni, hasil coaching</span></span>' + icon('chevron-right') + '</button>';   // Fase AG
     if (!list.length) {
       html += emptyState('dumbbell', 'Belum ada coach', 'Tambahkan coach untuk mulai membagi sesi.');
     } else {
@@ -12251,6 +12257,7 @@
       window.showToast(v ? 'Alamat QR tersimpan.' : 'Kembali ke alamat bawaan.');
     }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
+  window.setPoster = function (el) { setToggle(el, 'posterEnabled', 'Poster coach aktif.', 'Poster coach dimatikan.', 'Poster coach', function (v) { window.posterOn = v !== false; }); };   // Fase AG
   window.setShare = function (el) { setToggle(el, 'shareEnabled', 'Kartu bagikan aktif.', 'Kartu bagikan dimatikan.', 'Kartu bagikan', function (v) { window.shareOn = v !== false; }); };
   window.setWarm = function (el) { setToggle(el, 'warmEnabled', 'Data disiapkan di latar tiap 15 menit.', 'Penyiapan data di latar dimatikan.', 'Siapkan data di latar'); };
   window.setClientGuide = function (el) { setToggle(el, 'clientGuideEnabled', 'Panduan klien baru aktif.', 'Panduan klien baru dimatikan.', 'Panduan klien baru'); };
@@ -12753,7 +12760,7 @@
     tiles += tile('window.openSettings()', 'sun-moon', 'Tampilan', 'Tema dan warna aksen');
     tiles += tile('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto');
     setHTML(el, '<div class="px-wrap px-stack px-2col px-saya">' + pxHead('Saya', '') + '<div class="px-band gfx-kontur"></div><div class="px-col px-sticky">' + athleteCardHtml({ hang: true }) + '</div>' +
-      '<div class="px-col">' + (window.pushWrapHtml ? window.pushWrapHtml() : '') + '<div class="px-tiles">' + tiles + '</div>' +
+      '<div class="px-col">' + (window.pushWrapHtml ? window.pushWrapHtml() : '') + '<div class="px-tiles">' + tiles + '</div>' + (window.posterConsentHtml ? window.posterConsentHtml(false) : '') +
       '<button type="button" class="btn btn-ghost btn-block" onclick="window.logoutCurrent()">' + icon('log-out') + 'Keluar</button></div></div>');
   }
 
@@ -13610,7 +13617,7 @@
     const coach = (window.coaches || []).find(c => String(c.id) === String(me.preferredCoachId)) || (window.coaches || [])[0];
     const w = pg.data && pg.data.summary && pg.data.summary.berat;
     let c1 = group('Profil', row('window.openProfileEdit()', 'pencil', 'Ubah kartu atlet', 'Nama, motto, warna, statistik') + row('window.openMyProfile()', 'user-round', 'Data akun', 'Nama, email, foto') + row(go('public-progress'), 'trending-up', 'Progres', w ? String(w.last.nilai).replace('.', ',') + ' kg' : 'Berat, ukuran, tes'));
-    c1 += group('Makan & berbagi', (nutTabOn() ? row(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh') : '') + (window.shareOn !== false ? row(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres') : '') + row(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', infoHasNew()));
+    c1 += group('Makan & berbagi', (nutTabOn() ? row(go('public-plan'), 'utensils', 'Rencana makan', 'Menu, belanja, angka tubuh') : '') + (window.shareOn !== false ? row(go('public-share'), 'layout-grid', 'Kartu saya', 'Bagikan latihan dan progres') : '') + row(go('public-info'), 'megaphone', 'Info & Tips', 'Dari coach', infoHasNew()) + (window.posterConsentHtml ? window.posterConsentHtml(true) : ''));   // Fase AG: izin poster
     let c2 = group('Paket & coach', row(go('public-pack'), 'package', 'Paket saya', total ? 'Sisa ' + rem + ' dari ' + total + ' sesi' : (me.packageName || 'Lihat paket')) + row(go('public-coaches'), 'dumbbell', 'Coach', coach ? coach.name : 'Profil, jam, chat') + row(go('calendar'), 'calendar-days', 'Jadwal', next ? fmtDate(new Date(next.start), { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtTime(new Date(next.start)) : 'Belum ada jadwal') + row('window.chatCoach()', 'message-circle', 'Chat coach', 'Lewat WhatsApp') + row('window.cutiOpen()', 'plane', 'Cuti / izin', 'Ajukan cuti atau izin sakit') + row("window.reportOpen('client')", 'file-text', 'Laporan PDF', 'Rangkuman progres untuk dibaca'));   // Fase AD1, AD4
     const p = X().profile;
     c2 += '<div class="ds-group"><p class="ds-gt">Tampilan</p><div class="ds-list"><div class="ds-row ds-static"><b class="grow">Tema</b><div class="seg" id="theme-seg-3" role="radiogroup" aria-label="Tema"></div></div>' +
@@ -14221,7 +14228,7 @@
     $('cpm-title').textContent = 'Menu klien';
     setHTML('cpm-body', group('Tambah', row('pr', 'list-plus', 'PR baru', '') + row('tes', 'timer', 'Tes kebugaran', '') + row('lewat', 'calendar-check', 'Latihan yang lewat', 'Catat latihan hari sebelumnya') + row('catatan', 'notebook-pen', 'Catatan privat', '')) +
       group('Kirim lewat WhatsApp', send) +
-      group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('laporan', 'file-text', 'Laporan PDF', 'Rangkuman progres untuk klien') +
+      group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('laporan', 'file-text', 'Laporan PDF', 'Rangkuman progres untuk klien') + (window.posterOn !== false ? row('poster', 'image', 'Poster kisah klien', 'Butuh izin klien di portal') : '') +
         row('tahan', 'pause', 'Tahan klien', 'Cuti, sakit, atau berhenti') + row('hapus', 'trash-2', 'Hapus klien', '', true)));   // Fase AD: laporan, tahan
     openSheet('sheet-cp-more');
   };
@@ -14231,7 +14238,7 @@
       pr: () => window.addTaskFor(id), tes: () => window.openCareTests(id), lewat: () => window.workoutOpenAdmin(id, '', '', true), catatan: () => window.openCareNotes(id),
       'wa-latihan': () => window.workoutSummaryWA(id), 'wa-tes': () => window.sendTestResult(id), 'wa-form': () => window.cpHealthRemind(id),
       ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal(),
-      laporan: () => window.reportOpen('admin', id), tahan: () => window.openHoldSheet(id)   // Fase AD
+      laporan: () => window.reportOpen('admin', id), poster: () => window.posterOpen('kisah', id), tahan: () => window.openHoldSheet(id)   // Fase AD
     }[k];
     window.closeModal();
     if (go) setTimeout(go, 120);
@@ -15754,5 +15761,602 @@
       (link && (off.length || cl.max) ? '<a class="btn btn-primary btn-block plan-up" href="' + h(link) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Naik paket via WhatsApp</a>' : '') +
       '<p class="plan-foot">' + icon('info') + 'Klien cuti tidak dihitung</p></div>';
   };
+
+  // ═══ Fase AG (T-2700+): poster coach, 9:16 dan 4:5 ═══════════════════════════════════════════════════════════════
+  // Satu panggilan getPosterData saat editor dibuka (PosterData.gs); ganti jenis, gaya, ukuran dan teks tidak memanggil
+  // server. Gambar digambar di kanvas dengan alat kartu bagikan (window.shareKit di Bagikan.html), dibagikan lewat jalur
+  // yang sama (pembungkus → navigator.share → unduh) dan tidak pernah diunggah. Pilihan disimpan di perangkat saja
+  // (xnk_poster_prefs). Warna: hitam-putih + --accent / --on-accent halaman (tidak ada warna merek di kode).
+  // Merek: xnk.my.id = merek pemilik; Library mengganti poBrand dengan nama usaha coach, dan tanda kecil "Didukung"
+  // datang dari shareKit.mark() (kosong di produksi), di pojok kanan bawah dalam pinggir 72 px.
+  (function () {   // eigen bereik: nama di bawah tidak bentrok dengan bagian lain
+  const poBrand = function () { return window.brandName ? window.brandName() : 'XNK'; };
+  const PO_W = 1080, PO_M = 72, PO_PREF = 'xnk_poster_prefs';
+  const PO_SIZES = { story: 1920, portrait: 1350 };
+  const PO_TYPES = ['promo', 'slot', 'profil', 'testi', 'hasil', 'kisah', 'xnk'];
+  const PO_NAME = { promo: 'Promo paket', slot: 'Slot minggu ini', profil: 'Profil coach', testi: 'Testimoni', hasil: 'Hasil coaching', kisah: 'Kisah klien', xnk: '' };
+  const PO_ICON = { promo: 'tag', slot: 'calendar-clock', profil: 'id-card', testi: 'quote', hasil: 'trophy', kisah: 'trending-up', xnk: 'rocket' };
+  const PO_TOOLS = [['jenis', 'Jenis', 'layers'], ['isi', 'Isi', 'list-checks'], ['teks', 'Teks', 'type'], ['gaya', 'Gaya', 'palette'], ['ukuran', 'Ukuran', 'ratio']];
+  const PO_STATS = [['sessions', 'Sesi selesai'], ['clients', 'Klien dilatih'], ['rating', 'Rating'], ['prs', 'Rekor baru'], ['kg', 'Berat turun'], ['cm', 'Pinggang turun'], ['total', 'Total klien']];
+  const PO_PERIODS = [['bulan', 'Bulan ini'], ['bulanLalu', 'Bulan lalu'], ['3bulan', '3 bulan'], ['semua', 'Semua']];
+  const PO_STORY = [['berat', 'Berat'], ['pinggang', 'Pinggang'], ['lift', 'Kekuatan'], ['sesi', 'Sesi & minggu']];
+  const PO_FACTS = [['spec', 'Spesialisasi'], ['bio', 'Tentang saya'], ['exp', 'Pengalaman'], ['cert', 'Sertifikasi'], ['ach', 'Prestasi'], ['loc', 'Lokasi']];
+  const PO_KDEF = { head: '', sub: '', cta: '', qr: true, wa: true, ig: true, pkgs: [], testi: 0, stats: null, story: null, facts: null };
+  const DOW_ID = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'], MON_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const po = { data: null, at: 0, coachId: '', type: 'promo', tab: 'jenis', results: {}, story: null, storyId: '', photo: null, avatar: null, blob: null, url: '', token: 0, ratio: 1920 / 1080, busy: false, err: '' };
+  let PP = null;
+
+  function poPrefs() {
+    let p = {}; try { p = JSON.parse(localStorage.getItem(PO_PREF) || '{}') || {}; } catch (e) {}
+    return { v: 1, size: PO_SIZES[p.size] ? p.size : 'story', style: ['gelap', 'terang', 'aksen', 'foto'].indexOf(p.style) !== -1 ? p.style : 'gelap', period: p.period || 'bulan', k: p.k && typeof p.k === 'object' ? p.k : {} };
+  }
+  function poSave() { try { localStorage.setItem(PO_PREF, JSON.stringify(PP)); } catch (e) {} }
+  function pk(t) { t = t || po.type; PP.k[t] = Object.assign({}, PO_KDEF, PP.k[t] || {}); return PP.k[t]; }
+  const poName = t => (t === 'xnk' ? ((po.data && po.data.xnkCoach && po.data.xnkCoach.title) || '') : PO_NAME[t]);
+  const kit = () => window.shareKit;
+
+  // ── angka & teks ──
+  const pnum = (v, d) => Number(v || 0).toLocaleString('id-ID', { maximumFractionDigits: d == null ? 1 : d });
+  const rupiah = v => 'Rp' + Number(v || 0).toLocaleString('id-ID');
+  function rpShort(v) {
+    v = Number(v) || 0;
+    if (v >= 1e6) return 'Rp' + pnum(Math.round(v / 1e5) / 10, 1) + ' jt';
+    if (v >= 1e3) return 'Rp' + pnum(Math.round(v / 1e3), 0) + 'rb';
+    return rupiah(v);
+  }
+  const first = s => String(s || '').trim().split(/\s+/)[0] || '';
+  function waText(ph) {
+    let d = String(ph || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.indexOf('62') === 0) d = '0' + d.slice(2);
+    return 'WA ' + d.replace(/^(\d{4})(\d{4})(\d+)$/, '$1 $2 $3');
+  }
+  function igText(s) {
+    const t = String(s || '').trim().replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/[/?#].*$/, '').replace(/^@/, '');
+    return t ? '@' + t : '';
+  }
+  const dShort = iso => { const p = String(iso || '').split('-').map(Number); return p[0] ? p[2] + ' ' + MON_ID[p[1] - 1] : ''; };
+  const periodLabel = k => ({ bulan: 'Bulan ini', bulanLalu: 'Bulan lalu', '3bulan': '3 bulan terakhir', semua: 'Sejak awal' }[k] || '');
+
+  // ── warna (dari token halaman) ──
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function hasAccent() { const a = document.documentElement.getAttribute('data-accent') || document.documentElement.getAttribute('data-brand-accent') || ''; return !!a && a !== 'hitam'; }
+  function rgbOf(c) {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(c || '').trim());
+    if (m) { let x = m[1]; if (x.length === 3) x = x.split('').map(ch => ch + ch).join(''); return [0, 2, 4].map(i => parseInt(x.slice(i, i + 2), 16)); }
+    const r = /rgba?\(([^)]+)\)/.exec(String(c || ''));
+    return r ? r[1].split(',').slice(0, 3).map(v => Number(v) || 0) : [255, 255, 255];
+  }
+  const alpha = (c, a) => 'rgba(' + rgbOf(c).join(',') + ',' + a + ')';
+  function poColors(style) {
+    const acc = hasAccent() ? cssVar('--accent') : '', onAcc = hasAccent() ? cssVar('--on-accent') : '';
+    if (style === 'terang') return { bg: '#FFFFFF', ink: '#0B0B0B', hi: acc || '#0B0B0B', onHi: acc ? onAcc : '#FFFFFF' };
+    if (style === 'aksen' && acc) return { bg: acc, ink: onAcc || '#FFFFFF', hi: onAcc || '#FFFFFF', onHi: acc };
+    return { bg: '#0B0B0B', ink: '#FFFFFF', hi: acc && rgbOf(acc).reduce((a, b) => a + b, 0) > 240 ? acc : '#FFFFFF', onHi: acc && rgbOf(acc).reduce((a, b) => a + b, 0) > 240 ? onAcc || '#0B0B0B' : '#0B0B0B' };
+  }
+
+  // ── teks di kanvas ──
+  function wrap(ctx, text, max, px, w, maxLines) {
+    const K = kit(); K.font(ctx, w, px);
+    const words = String(text || '').split(/\s+/).filter(Boolean), lines = [];
+    let cur = '';
+    words.forEach(function (wd) {
+      const t = cur ? cur + ' ' + wd : wd;
+      if (ctx.measureText(t).width <= max || !cur) cur = t; else { lines.push(cur); cur = wd; }
+    });
+    if (cur) lines.push(cur);
+    if (maxLines && lines.length > maxLines) { const keep = lines.slice(0, maxLines); keep[maxLines - 1] = keep[maxLines - 1].replace(/\s*\S*$/, '') + '…'; return keep; }
+    return lines;
+  }
+  /** Judul besar: kecilkan sampai muat maxLines baris; kembalikan {lines, px}. */
+  function fitTitle(ctx, text, max, px, maxLines, minPx) {
+    const t = String(text || '').toUpperCase();
+    let lines = wrap(ctx, t, max, px, 800);
+    while ((lines.length > maxLines || lines.some(l => { kit().font(ctx, 800, px); return ctx.measureText(l).width > max; })) && px > (minPx || 56)) { px -= 6; lines = wrap(ctx, t, max, px, 800); }
+    return { lines: lines.slice(0, maxLines), px: px };
+  }
+  function lines(ctx, ls, x, y, px, lh, w, a, al) { ls.forEach((l, i) => kit().Tx(ctx, l, x, y + i * lh, px, w, a, al)); return y + (ls.length - 1) * lh; }
+  function star(ctx, cx, cy, r, fill) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) { const rr = i % 2 ? r * .45 : r, an = -Math.PI / 2 + i * Math.PI / 5; ctx[i ? 'lineTo' : 'moveTo'](cx + rr * Math.cos(an), cy + rr * Math.sin(an)); }
+    ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  }
+  function pill(ctx, text, x, y, px, c, solid) {
+    const K = kit(); K.font(ctx, 700, px);
+    const w = ctx.measureText(text).width + px * 1.3, hgt = px * 1.9;
+    K.rrect(ctx, x, y, w, hgt, hgt / 2); ctx.fillStyle = solid ? c.hi : alpha(c.ink, .1); ctx.fill();
+    ctx.fillStyle = solid ? c.onHi : c.ink; K.Tx(ctx, text, x + w / 2, y + hgt * .66, px, 700, 1, 'center'); ctx.fillStyle = c.ink;
+    return w;
+  }
+
+  // ── isi tiap jenis ──
+  function coachName() { const c = po.data && po.data.coach, n = String((c && c.name) || '').trim(); return n ? window.coachLabel(/^coach\b/i.test(n) ? n : first(n)) : ''; }
+  function defaults(t) {
+    const d = po.data || {}, c = d.coach || {}, x = d.xnkCoach || {};
+    const st = po.story || {};
+    const map = {
+      promo: { head: 'Latihan privat bareng ' + coachName(), sub: c.headline || 'Program personal, jadwal fleksibel, progres tercatat.', cta: 'Booking sekarang' },
+      slot: { head: 'Slot kosong minggu ini', sub: slotRange(), cta: 'Amankan jadwalmu' },
+      profil: { head: c.name || '', sub: c.headline || c.specialty || 'Personal trainer', cta: 'Chat untuk jadwal latihan' },
+      testi: { head: '', sub: '', cta: 'Mulai latihanmu' },
+      hasil: { head: 'Hasil coaching', sub: periodLabel(PP.period), cta: 'Giliranmu berikutnya' },
+      kisah: { head: st.berat && st.berat.change < 0 ? 'Turun ' + pnum(-st.berat.change) + ' kg' : st.lift ? 'Lebih kuat ' + Math.round((st.lift.to - st.lift.from) / Math.max(1, st.lift.from) * 100) + '%' : 'Perjalanan ' + (st.first || ''), sub: '', cta: 'Mulai perjalananmu' },
+      xnk: { head: 'Aplikasi untuk personal trainer', sub: 'Booking, jadwal, latihan, gizi, dan progres klien dalam satu tempat.', cta: x.url ? 'Daftar di ' + String(x.url).replace(/^https?:\/\//, '') : '' }
+    };
+    return map[t];
+  }
+  function slotRange() {
+    const days = ((po.data && po.data.slots) || []).slice(0, 7), total = days.reduce((a, d) => a + d.hours.length, 0);
+    return days.length ? dShort(days[0].date) + ' – ' + dShort(days[days.length - 1].date) + ' · ' + total + ' jam kosong' : '';
+  }
+  const txt = (t, key) => { const k = pk(t), v = String(k[key] || '').trim(); return v || defaults(t)[key]; };
+
+  function hasStats(r, key) {
+    if (!r) return false;
+    return { sessions: r.sessions > 0, clients: r.clients > 0, rating: r.rating != null, prs: r.prs > 0, kg: r.kgDown > 0, cm: r.cmDown > 0, total: r.totalClients > 0 }[key];
+  }
+  function statVal(r, key) {
+    return {
+      sessions: [pnum(r.sessions, 0), 'Sesi selesai'], clients: [pnum(r.clients, 0), 'Klien dilatih'],
+      rating: [pnum(r.rating, 1) + '/5', 'Rating · ' + r.ratings + ' ulasan'], prs: [pnum(r.prs, 0), 'Rekor baru · ' + r.prClients + ' klien'],
+      kg: [pnum(r.kgDown) + ' kg', 'Berat turun · ' + r.kgClients + ' klien'], cm: [pnum(r.cmDown) + ' cm', 'Pinggang turun · ' + r.cmClients + ' klien'],
+      total: [pnum(r.totalClients, 0), 'Total klien']
+    }[key];
+  }
+  function curResults() { return po.results[PP.period] || null; }
+  function pickedStats() {
+    const r = curResults(), k = pk('hasil');
+    const on = Array.isArray(k.stats) ? k.stats : PO_STATS.map(s => s[0]).filter(s => s !== 'total' && hasStats(r, s));
+    return on.filter(s => hasStats(r, s)).slice(0, 6);
+  }
+  function pickedPkgs() {
+    const all = (po.data && po.data.packages) || [], k = pk('promo');
+    const on = (k.pkgs || []).map(id => all.find(p => String(p.id) === String(id))).filter(Boolean);
+    return (on.length ? on : all.slice(0, 3)).slice(0, 3);
+  }
+  function factsOn() { const k = pk('profil'); return Array.isArray(k.facts) ? k.facts : ['spec', 'bio', 'exp', 'cert', 'ach', 'loc']; }
+  function storyOn() { const k = pk('kisah'); return Array.isArray(k.story) ? k.story : ['berat', 'pinggang', 'lift', 'sesi']; }
+
+  /** Gambar satu poster. o = { type, size, style, scale } */
+  async function poDraw(o, canvas) {
+    const K = kit(), H = PO_SIZES[o.size] || 1920, sc = o.scale || 1, c = poColors(o.style);
+    canvas = canvas || document.createElement('canvas');
+    canvas.width = PO_W * sc; canvas.height = H * sc;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(sc, 0, 0, sc, 0, 0);
+    await K.loadFonts();
+    const img = await K.logo();
+    const s = H === 1920 ? 1 : .84, W = PO_W, M = PO_M;
+    // latar
+    ctx.fillStyle = c.bg; ctx.fillRect(0, 0, W, H);
+    const photoTop = (o.type === 'kisah' || o.style === 'foto') && po.photo;
+    if (o.style === 'foto' && po.photo) {
+      K.drawCover(ctx, po.photo, 0, 0, W, H);
+      const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(.4, 'rgba(0,0,0,.25)'); g.addColorStop(1, 'rgba(0,0,0,.82)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    ctx.fillStyle = c.ink; ctx.textBaseline = 'alphabetic';
+    // kepala: logo + merek, label kecil di kanan
+    const lh = 54 * s; let x0 = M;
+    if (img) { const lw = Math.round(lh * img.width / img.height); ctx.drawImage(K.tinted(img, lw, lh, c.ink), M, M); x0 += lw + 16; }
+    const brand = String(poBrand()).slice(0, 22);
+    K.Tx(ctx, brand, x0, M + lh * .85, K.fit(ctx, brand, 56 * s, 900, W - 2 * M - 360), 900, 1);
+    K.caps(ctx, o.type === 'xnk' ? 'Untuk coach' : 'Personal training', W - M, M + lh * .72, 24 * s, .7, 'right', 330);
+    const top = M + lh + 56 * s;
+    // kaki: ajakan, kontak, QR
+    const k = pk(o.type), d = po.data || {}, coach = d.coach || {};
+    const qrUrl = o.type === 'xnk' ? (d.xnkCoach && d.xnkCoach.url) : d.qrUrl;
+    const qr = k.qr && qrUrl ? Math.round(190 * s) : 0;
+    const contact = o.type === 'xnk' ? [] : [k.wa ? waText(coach.wa) : '', k.ig ? igText(coach.instagram) : ''].filter(Boolean);
+    const cta = txt(o.type, 'cta');
+    const footH = Math.max(qr, (cta ? 84 * s : 0) + contact.length * 44 * s) + 36 * s;
+    const footTop = H - M - footH;
+    ctx.globalAlpha = .22; ctx.fillStyle = c.ink; ctx.fillRect(M, footTop, W - 2 * M, 2); ctx.globalAlpha = 1;
+    const fw = W - 2 * M - (qr ? qr + 36 : 0);
+    let fy = footTop + 36 * s + (qr ? Math.max(0, (qr - ((cta ? 84 * s : 0) + contact.length * 44 * s)) / 2) : 0);
+    if (cta) { const t = fitTitle(ctx, cta, fw, 64 * s, 1, 36); K.Tx(ctx, t.lines[0], M, fy + 60 * s, t.px, 800, 1); fy += 84 * s; }
+    contact.forEach(function (line) { K.Tx(ctx, line, M, fy + 34 * s, K.fit(ctx, line, 34 * s, 600, fw), 600, .85); fy += 44 * s; });
+    if (qr) K.drawQr(ctx, qrUrl, W - M - qr, footTop + 36 * s, qr, c.ink === '#FFFFFF' || rgbOf(c.ink).reduce((a, b) => a + b, 0) > 600 ? '#FFFFFF' : '#0B0B0B');
+    ctx.fillStyle = c.ink;
+    // tanda kecil (Library saja; xnk.my.id kosong; Setup Custom: data-own-brand)
+    const by = K.mark();
+    if (by && !document.documentElement.hasAttribute('data-own-brand')) K.Tx(ctx, by, W - 72, H - 30, 24, 600, .6, 'right');
+    // isi
+    const box = { x: M, y: top, w: W - 2 * M, h: footTop - 48 * s - top };
+    const R = { box: box, foot: { y: footTop, h: footH }, H: H, qr: qr };
+    (DRAW[o.type] || DRAW.promo)(ctx, box, c, s, o, photoTop);
+    ctx.globalAlpha = 1;
+    canvas._po = R;
+    return canvas;
+  }
+
+  function head(ctx, b, c, s, t, maxLines, startPx) {
+    const ttl = fitTitle(ctx, txt(t, 'head'), b.w, (startPx || 128) * s, maxLines || 3, 60);
+    const lh = ttl.px * 1.02;
+    let y = b.y + ttl.px;
+    ctx.fillStyle = c.ink; lines(ctx, ttl.lines, b.x, y, ttl.px, lh, 800, 1);
+    y += (ttl.lines.length - 1) * lh;
+    const sub = txt(t, 'sub');
+    if (sub) { const sl = wrap(ctx, sub, b.w, 38 * s, 600, 2); y += 30 * s; lines(ctx, sl, b.x, y + 38 * s, 38 * s, 50 * s, 600, .82); y += 38 * s + (sl.length - 1) * 50 * s; }
+    return y + 48 * s;
+  }
+
+  const DRAW = {
+    promo: function (ctx, b, c, s) {
+      const K = kit(); let y = head(ctx, b, c, s, 'promo');
+      const list = pickedPkgs();
+      if (!list.length) { K.Tx(ctx, 'Belum ada paket aktif', b.x, y + 40 * s, 40 * s, 600, .6); return; }
+      const one = list.length === 1, gap = 22 * s;
+      const ch = Math.min(one ? 360 * s : 200 * s, (b.y + b.h - y - gap * (list.length - 1)) / list.length);
+      list.forEach(function (p, i) {
+        const cy = y + i * (ch + gap);
+        K.rrect(ctx, b.x, cy, b.w, ch, 36); ctx.fillStyle = i === 0 ? c.hi : alpha(c.ink, .08); ctx.fill();
+        const ink = i === 0 ? c.onHi : c.ink; ctx.fillStyle = ink;
+        const pad = 40 * s, price = rupiah(p.harga);
+        K.font(ctx, 800, 72 * s); const pw = ctx.measureText(price).width;
+        const nm = String(p.nama || '');
+        K.Tx(ctx, nm, b.x + pad, cy + pad + 44 * s, K.fit(ctx, nm, 46 * s, 800, b.w - 3 * pad - pw), 800, 1);
+        const meta = [p.sesi ? p.sesi + ' sesi' : '', p.durasi ? String(p.durasi) : ''].filter(Boolean).join(' · ');
+        if (meta) K.Tx(ctx, meta, b.x + pad, cy + pad + 96 * s, 32 * s, 500, .75);
+        K.Tx(ctx, price, b.x + b.w - pad, cy + pad + 62 * s, 72 * s, 800, 1, 'right');
+        if (p.sesi > 0 && p.harga > 0) K.Tx(ctx, rpShort(p.harga / p.sesi) + ' / sesi', b.x + b.w - pad, cy + pad + 108 * s, 30 * s, 600, .75, 'right');
+        if (one) (p.benefit || []).slice(0, 4).forEach(function (bn, j) { K.Tx(ctx, '✓  ' + bn, b.x + pad, cy + pad + (170 + j * 48) * s, K.fit(ctx, '✓  ' + bn, 34 * s, 600, b.w - 2 * pad), 600, .9); });
+        ctx.fillStyle = c.ink;
+      });
+    },
+    slot: function (ctx, b, c, s) {
+      const K = kit(), days = ((po.data && po.data.slots) || []).slice(0, 7);
+      const total = days.reduce((a, d) => a + d.hours.length, 0);
+      const y = head(ctx, b, c, s, 'slot', 2, 120);
+      const rowH = Math.min(150 * s, (b.y + b.h - y) / Math.max(1, days.length));
+      const lw = 190 * s, pillPx = 30 * s, gap = 12;
+      days.forEach(function (d, i) {
+        const ry = y + i * rowH;
+        if (i) { ctx.globalAlpha = .14; ctx.fillRect(b.x, ry, b.w, 2); ctx.globalAlpha = 1; }
+        K.caps(ctx, DOW_ID[d.dow], b.x, ry + rowH * .46, 30 * s, 1, 'left', lw);
+        K.Tx(ctx, dShort(d.date), b.x, ry + rowH * .46 + 40 * s, 28 * s, 500, .65);
+        let x = b.x + lw;
+        const hrs = d.hours.map(hh => ('0' + hh).slice(-2) + '.00');
+        if (!hrs.length) { K.Tx(ctx, d.closed ? 'Libur' : 'Penuh', x, ry + rowH * .5 + 12 * s, 34 * s, 600, .45); return; }
+        K.font(ctx, 700, pillPx); const pw = ctx.measureText('00.00').width + pillPx * 1.3;
+        const fitN = Math.max(1, Math.floor((b.w - lw + gap) / (pw + gap)));
+        const show = hrs.length > fitN ? hrs.slice(0, fitN - 1) : hrs;
+        show.forEach(function (t2) { x += pill(ctx, t2, x, ry + rowH / 2 - pillPx * .95, pillPx, c, true) + gap; });
+        if (hrs.length > show.length) pill(ctx, '+' + (hrs.length - show.length), x, ry + rowH / 2 - pillPx * .95, pillPx, c, false);
+      });
+      if (!days.length || !total) K.Tx(ctx, 'Semua jam minggu ini sudah penuh', b.x, y + 60 * s, 40 * s, 600, .6);
+    },
+    profil: function (ctx, b, c, s, o) {
+      const K = kit(), co = (po.data && po.data.coach) || {}, H = o.size === 'story';
+      const d = Math.round((H ? 380 : 260) * s);
+      let y = b.y;
+      ctx.save(); ctx.beginPath(); ctx.arc(b.x + d / 2, y + d / 2, d / 2, 0, 7); ctx.fillStyle = alpha(c.ink, .1); ctx.fill(); ctx.restore();
+      if (po.avatar && po.avatar.naturalWidth) K.drawAvatar(ctx, po.avatar, b.x, y, d);
+      else { ctx.fillStyle = c.ink; K.Tx(ctx, (first(co.name)[0] || '?').toUpperCase(), b.x + d / 2, y + d * .66, d * .5, 800, .8, 'center'); }
+      ctx.fillStyle = c.ink;
+      y += d + 56 * s;
+      const nb = { x: b.x, y: y, w: b.w, h: b.h };
+      y = head(ctx, nb, c, s, 'profil', 2, 120);
+      const on = factsOn();
+      const spec = String(co.specialty || '').split(/[,;/]/).map(x => x.trim()).filter(Boolean).slice(0, 4);
+      if (on.indexOf('spec') !== -1 && spec.length) {
+        let x = b.x; spec.forEach(function (sp) { K.font(ctx, 700, 30 * s); if (x + ctx.measureText(sp).width + 40 * s > b.x + b.w) return; x += pill(ctx, sp, x, y - 10 * s, 30 * s, c, false) + 12; });
+        y += 90 * s;
+      }
+      const facts = [
+        ['bio', 'Tentang saya', co.bio], ['exp', 'Pengalaman', co.experience], ['cert', 'Sertifikasi', (co.certifications || []).slice(0, 3).join(' · ')],
+        ['ach', 'Prestasi', (co.achievements || []).slice(0, 2).join(' · ')], ['loc', 'Lokasi', co.location]
+      ].filter(f => on.indexOf(f[0]) !== -1 && String(f[2] || '').trim());
+      facts.forEach(function (f) {
+        if (y + 110 * s > b.y + b.h) return;
+        K.caps(ctx, f[1], b.x, y, 24 * s, .6, 'left', b.w);
+        const l = wrap(ctx, String(f[2]), b.w, 38 * s, 600, f[0] === 'bio' ? Math.max(1, Math.min(5, Math.floor((b.y + b.h - y - 60 * s) / (48 * s)))) : 2);
+        lines(ctx, l, b.x, y + 50 * s, 38 * s, 48 * s, 600, .95);
+        y += 50 * s + (l.length - 1) * 48 * s + 46 * s;
+      });
+    },
+    testi: function (ctx, b, c, s) {
+      const K = kit(), list = (po.data && po.data.testimonials) || [], t = list[pk('testi').testi] || list[0];
+      if (!t) { K.Tx(ctx, 'Belum ada testimoni yang diizinkan klien', b.x, b.y + 80 * s, 40 * s, 600, .6); return; }
+      ctx.fillStyle = c.hi; K.Tx(ctx, '“', b.x - 12, b.y + 250 * s, 340 * s, 800, 1); ctx.fillStyle = c.ink;
+      let y = b.y + 300 * s;
+      const len = t.text.length, px = (len < 90 ? 66 : len < 160 ? 54 : len < 230 ? 46 : 40) * s;
+      const maxL = Math.max(3, Math.floor((b.y + b.h - y - 220 * s) / (px * 1.32)));
+      const l = wrap(ctx, t.text, b.w, px, 700, maxL);
+      lines(ctx, l, b.x, y + px, px, px * 1.32, 700, 1);
+      y += px + (l.length - 1) * px * 1.32 + 70 * s;
+      for (let i = 0; i < 5; i++) star(ctx, b.x + 30 * s + i * 70 * s, y, 28 * s, i < (t.stars || 5) ? c.hi : alpha(c.ink, .2));
+      ctx.fillStyle = c.ink;
+      y += 90 * s;
+      K.Tx(ctx, t.name, b.x, y, 42 * s, 800, 1);
+      const sub = txt('testi', 'sub') || ('Klien ' + coachName());
+      K.Tx(ctx, sub, b.x, y + 52 * s, 32 * s, 500, .7);
+    },
+    hasil: function (ctx, b, c, s) {
+      const K = kit(); let y = head(ctx, b, c, s, 'hasil', 2, 124);
+      const r = curResults(), on = pickedStats();
+      if (!r) { K.Tx(ctx, 'Memuat angka…', b.x, y + 40 * s, 40 * s, 600, .6); return; }
+      if (!on.length) { K.Tx(ctx, 'Belum ada angka untuk periode ini', b.x, y + 40 * s, 40 * s, 600, .6); return; }
+      const cols = 2, rows = Math.ceil(on.length / cols), gap = 22 * s;
+      const th = Math.min(300 * s, (b.y + b.h - y - gap * (rows - 1)) / rows), tw = (b.w - gap) / cols;
+      on.forEach(function (key, i) {
+        const tx = b.x + (i % cols) * (tw + gap), ty = y + Math.floor(i / cols) * (th + gap), v = statVal(r, key);
+        K.rrect(ctx, tx, ty, tw, th, 32); ctx.fillStyle = i === 0 ? c.hi : alpha(c.ink, .08); ctx.fill();
+        ctx.fillStyle = i === 0 ? c.onHi : c.ink;
+        const vp = K.fit(ctx, v[0], Math.min(120 * s, th * .45), 800, tw - 64 * s);
+        K.Tx(ctx, v[0], tx + 32 * s, ty + th * .58, vp, 800, 1);
+        K.Tx(ctx, v[1], tx + 32 * s, ty + th * .58 + 52 * s, K.fit(ctx, v[1], 28 * s, 600, tw - 64 * s), 600, .8);
+        ctx.fillStyle = c.ink;
+      });
+    },
+    kisah: function (ctx, b, c, s, o, photoTop) {
+      const K = kit(), st = po.story;
+      if (!st) { K.Tx(ctx, (po.data && po.data.stories && po.data.stories.length) ? 'Pilih klien di Isi' : 'Belum ada klien yang memberi izin', b.x, b.y + 80 * s, 40 * s, 600, .6); return; }
+      let y = b.y;
+      if (photoTop && o.style !== 'foto') {
+        const ph = Math.round(b.h * (o.size === 'story' ? .4 : .34));
+        ctx.save(); K.rrect(ctx, b.x, y, b.w, ph, 36); ctx.clip(); K.drawCover(ctx, po.photo, b.x, y, b.w, ph, .3); ctx.restore();
+        y += ph + 48 * s;
+      }
+      K.caps(ctx, 'Kisah ' + st.first, b.x, y + 24 * s, 26 * s, .7, 'left', b.w);
+      y = head(ctx, { x: b.x, y: y + 44 * s, w: b.w, h: b.h }, c, s, 'kisah', 2, 120);
+      const on = storyOn(), rows = [];
+      if (on.indexOf('berat') !== -1 && st.berat) rows.push(['Berat', pnum(st.berat.from) + ' → ' + pnum(st.berat.to) + ' kg', (st.berat.change > 0 ? '+' : '') + pnum(st.berat.change) + ' kg']);
+      if (on.indexOf('pinggang') !== -1 && st.pinggang) rows.push(['Pinggang', pnum(st.pinggang.from) + ' → ' + pnum(st.pinggang.to) + ' cm', (st.pinggang.change > 0 ? '+' : '') + pnum(st.pinggang.change) + ' cm']);
+      if (on.indexOf('lift') !== -1 && st.lift) rows.push([st.lift.gerakan, pnum(st.lift.from, 0) + ' → ' + pnum(st.lift.to, 0) + ' kg', '+' + pnum(st.lift.to - st.lift.from, 0) + ' kg']);
+      if (on.indexOf('sesi') !== -1 && (st.weeks || st.sessions)) rows.push(['Bersama ' + coachName(), st.weeks + ' minggu', st.sessions + ' sesi']);
+      const rh = Math.min((o.size === 'story' ? 200 : 150) * s, (b.y + b.h - y) / Math.max(1, rows.length));
+      rows.forEach(function (r, i) {
+        const ry = y + i * rh;
+        if (ry + rh > b.y + b.h + 4) return;
+        ctx.globalAlpha = .16; ctx.fillRect(b.x, ry, b.w, 2); ctx.globalAlpha = 1;
+        K.caps(ctx, r[0], b.x, ry + 46 * s, 24 * s, .65, 'left', b.w * .6);
+        K.Tx(ctx, r[1], b.x, ry + 46 * s + 64 * s, K.fit(ctx, r[1], 60 * s, 800, b.w * .64), 800, 1);
+        ctx.fillStyle = c.hi; K.Tx(ctx, r[2], b.x + b.w, ry + 46 * s + 64 * s, K.fit(ctx, r[2], 48 * s, 800, b.w * .34), 800, 1, 'right'); ctx.fillStyle = c.ink;
+      });
+    },
+    xnk: function (ctx, b, c, s) {
+      const K = kit(), x = (po.data && po.data.xnkCoach) || { tiers: [] };
+      let y = head(ctx, b, c, s, 'xnk', 3, 118);
+      const tiers = x.tiers || [], gap = 20 * s, th = Math.min(200 * s, (b.y + b.h - y - gap * (tiers.length - 1)) / Math.max(1, tiers.length));
+      tiers.forEach(function (t, i) {
+        const ty = y + i * (th + gap), hi = !!t.popular;
+        K.rrect(ctx, b.x, ty, b.w, th, 32); ctx.fillStyle = hi ? c.hi : alpha(c.ink, .08); ctx.fill();
+        ctx.fillStyle = hi ? c.onHi : c.ink;
+        const pad = 36 * s, price = rpShort(t.bulanan);
+        K.Tx(ctx, t.name, b.x + pad, ty + pad + 44 * s, 50 * s, 800, 1);
+        K.Tx(ctx, t.limit, b.x + pad, ty + pad + 92 * s, K.fit(ctx, t.limit, 30 * s, 500, b.w * .55), 500, .8);
+        K.Tx(ctx, price, b.x + b.w - pad, ty + pad + 52 * s, 64 * s, 800, 1, 'right');
+        K.Tx(ctx, '/ bulan', b.x + b.w - pad, ty + pad + 92 * s, 28 * s, 600, .75, 'right');
+        if (hi) { K.font(ctx, 800, 50 * s); K.caps(ctx, 'Paling dipilih', b.x + pad + ctx.measureText(t.name).width + 20 * s, ty + pad + 40 * s, 20 * s, .85, 'left', b.w * .3); }
+        ctx.fillStyle = c.ink;
+      });
+    }
+  };
+
+  // ── editor ──
+  const $p = id => document.getElementById(id);
+  const isDeskP = () => window.innerWidth >= 768;
+  function availTypes() { return PO_TYPES.filter(t => t !== 'xnk' || !!(po.data && po.data.xnkCoach)); }
+  function ensurePoShell() {
+    const sh = $p('sheet-poster');
+    if (!sh || $p('po-stage')) return;
+    sh.classList.add('share-sheet', 'poster-sheet');
+    sh.innerHTML = '<div class="sh-top"><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup">' + icon('x') + '</button>' +
+      '<h2 class="sh-title" id="po-title">Poster</h2><button type="button" class="btn btn-ghost btn-sm sh-reset" onclick="window.posterResetText()">Reset teks</button></div>' +
+      '<div class="sh-main"><div class="sh-stage" id="po-stage"><div class="share-preview solid" id="po-box" role="img" aria-label="Pratinjau poster"><img id="po-img" alt="Pratinjau poster" draggable="false"><div class="sh-busy hide" id="po-busy"></div></div>' +
+      '<p class="po-msg hide" id="po-msg" role="status"></p></div>' +
+      '<div class="sh-side"><div class="sh-tools" id="po-tabs" role="tablist" aria-label="Alat poster"></div><div class="sh-body" id="po-body"></div></div></div>' +
+      '<div class="sh-foot" id="po-foot"></div>' +
+      '<input type="file" id="po-file" accept="image/*" class="sr-only" onchange="window.posterFile(this)" aria-label="Pilih foto">';
+  }
+  const chipP = (grp, val, label, cur) => '<button type="button" class="chip' + (String(cur) === String(val) ? ' active' : '') + '" role="radio" aria-checked="' + (String(cur) === String(val)) + '" onclick="window.posterSet(\'' + grp + '\',\'' + h(String(val)) + '\')">' + label + '</button>';
+  const rowP = (label, inner) => '<div class="sh-row"><span class="sh-lbl">' + label + '</span><div class="sh-chips" role="radiogroup" aria-label="' + h(label) + '">' + inner + '</div></div>';
+  const togP = (label, on, grp, val) => '<label class="row-between sh-toggle"><span>' + h(label) + '</span><span class="toggle"><input type="checkbox"' + (on ? ' checked' : '') + ' onchange="window.posterSet(\'' + grp + '\',\'' + (val || '') + '\',this.checked)" aria-label="' + h(label) + '"><span></span></span></label>';
+  const noteP = t => '<p class="sh-note">' + t + '</p>';
+
+  function paneJenis() {
+    let out = '<div class="sh-kinds" role="radiogroup" aria-label="Jenis poster">' + availTypes().map(t => '<button type="button" class="sh-kind' + (t === po.type ? ' active' : '') + '" role="radio" aria-checked="' + (t === po.type) + '" onclick="window.posterSet(\'type\',\'' + t + '\')">' + icon(PO_ICON[t]) + '<span>' + h(poName(t)) + '</span></button>').join('') + '</div>';
+    const cs = (po.data && po.data.coaches) || [];
+    if (cs.length) out += rowP('Coach', cs.map(cc => chipP('coach', cc.id, h(first(cc.name)), (po.data.coach || {}).id)).join(''));
+    return out;
+  }
+  function paneIsi() {
+    const t = po.type, k = pk(t), d = po.data || {};
+    if (t === 'promo') {
+      const all = d.packages || [], cur = pickedPkgs().map(p => String(p.id));
+      if (!all.length) return noteP('Belum ada paket aktif. Tambahkan di Pengaturan → Paket &amp; Harga.');
+      return '<div class="sh-toggles">' + all.map(p => togP(p.nama + ' · ' + rpShort(p.harga), cur.indexOf(String(p.id)) !== -1, 'pkg', p.id)).join('') + '</div>' + noteP('Maksimal 3 paket. Paket pertama diberi warna.');
+    }
+    if (t === 'slot') return noteP('Jam kosong 7 hari ke depan, dihitung dari jadwal dan jam kerja coach. Penuh atau libur tampil apa adanya.');
+    if (t === 'profil') return '<div class="sh-toggles">' + PO_FACTS.map(f => togP(f[1], factsOn().indexOf(f[0]) !== -1, 'fact', f[0])).join('') + '</div>' + noteP('Isi profil diubah di Coach → Profil. Foto dari profil coach.');
+    if (t === 'testi') {
+      const list = d.testimonials || [];
+      if (!list.length) return noteP('Belum ada testimoni. Testimoni muncul di sini bila klien memberi izin saat menilai sesi atau mengisi evaluasi paket.');
+      return '<div class="po-list" role="radiogroup" aria-label="Pilih testimoni">' + list.map((x, i) => '<button type="button" class="po-li' + (i === (k.testi || 0) ? ' active' : '') + '" role="radio" aria-checked="' + (i === (k.testi || 0)) + '" onclick="window.posterSet(\'testi\',\'' + i + '\')"><b>' + h(x.name) + ' · ' + '★'.repeat(Math.max(1, Math.min(5, x.stars || 5))) + '</b><span>' + h(x.text.slice(0, 90)) + (x.text.length > 90 ? '…' : '') + '</span></button>').join('') + '</div>';
+    }
+    if (t === 'hasil') {
+      const r = curResults();
+      return rowP('Periode', PO_PERIODS.map(p => chipP('period', p[0], p[1], PP.period)).join('')) +
+        (r ? '<div class="sh-toggles">' + PO_STATS.filter(s2 => hasStats(r, s2[0])).map(s2 => togP(s2[1] + ' · ' + statVal(r, s2[0])[0], pickedStats().indexOf(s2[0]) !== -1, 'stat', s2[0])).join('') + '</div>' : noteP('Memuat angka…')) +
+        noteP('Jumlah saja, tanpa nama klien. Maksimal 6 angka.');
+    }
+    if (t === 'kisah') {
+      const list = d.stories || [];
+      let out = list.length ? rowP('Klien', list.map(x => chipP('story', x.id, h(x.first), po.storyId)).join('')) : noteP('Belum ada klien yang memberi izin. Klien menyalakan <b>Hasil saya untuk poster coach</b> di portal → Saya.');
+      if (po.story) out += '<div class="sh-toggles">' + PO_STORY.map(f => togP(f[1], storyOn().indexOf(f[0]) !== -1, 'storyf', f[0])).join('') + '</div>';
+      out += rowP('Foto', '<button type="button" class="chip" onclick="window.posterPick()">' + icon('image') + (po.photo ? 'Ganti foto' : 'Pilih dari HP') + '</button>' + (po.photo ? '<button type="button" class="chip" onclick="window.posterSet(\'nophoto\',\'\')">' + icon('x') + 'Hapus</button>' : ''));
+      return out + noteP('Hanya nama depan dan angka. Pakai foto hanya bila klien setuju; foto tidak diunggah.');
+    }
+    if (t === 'xnk') return noteP('Harga dari daftar paket resmi. QR menuju halaman daftar.');
+    return '';
+  }
+  function paneTeks() {
+    const t = po.type, k = pk(t), dd = defaults(t);
+    const inp = (key, label, max) => '<div class="field"><label class="label" for="po-' + key + '">' + label + '</label><input class="input" id="po-' + key + '" maxlength="' + max + '" value="' + h(k[key] || '') + '" placeholder="' + h(dd[key] || '') + '" oninput="window.posterText(\'' + key + '\', this.value)"></div>';
+    let out = (t === 'testi' ? '' : inp('head', 'Judul', 80)) + inp('sub', t === 'testi' ? 'Baris di bawah nama' : 'Teks kecil', 120) + inp('cta', 'Ajakan', 60);
+    out += '<div class="sh-toggles">' + (t !== 'xnk' ? togP('Nomor WhatsApp', k.wa, 'wa') + togP('Instagram', k.ig, 'ig') : '') + togP('Kode QR', k.qr, 'qr') + '</div>';
+    return out + noteP('Kosong = teks bawaan (abu-abu). Tersimpan di perangkat ini.');
+  }
+  function paneGaya() {
+    const st = [['gelap', 'Gelap'], ['terang', 'Terang']].concat(hasAccent() ? [['aksen', 'Warna aksen']] : [], [['foto', 'Foto']]);
+    let out = rowP('Gaya', st.map(x => chipP('style', x[0], x[1], PP.style)).join(''));
+    if (PP.style === 'foto') out += rowP('Foto latar', '<button type="button" class="chip" onclick="window.posterPick()">' + icon('image') + (po.photo ? 'Ganti foto' : 'Pilih foto') + '</button>');
+    return out + noteP('Foto dipilih dari perangkat dan tidak diunggah.');
+  }
+  function paneUkuran() { return rowP('Ukuran', chipP('size', 'story', 'Story 9:16', PP.size) + chipP('size', 'portrait', 'Feed 4:5', PP.size)) + noteP('9:16 untuk Story, Reels, dan Status WhatsApp. 4:5 untuk feed Instagram.'); }
+  const PO_PANES = { jenis: paneJenis, isi: paneIsi, teks: paneTeks, gaya: paneGaya, ukuran: paneUkuran };
+
+  function poControls() {
+    const tabs = $p('po-tabs'), body = $p('po-body'), sh = $p('sheet-poster');
+    if (!tabs) return;
+    if (isDeskP() && !po.tab) po.tab = 'jenis';
+    tabs.innerHTML = PO_TOOLS.map(t => '<button type="button" role="tab" class="sh-tool' + (po.tab === t[0] ? ' active' : '') + '" data-tool="' + t[0] + '" aria-selected="' + (po.tab === t[0]) + '" onclick="window.posterTab(\'' + t[0] + '\')">' + icon(t[2]) + '<span>' + t[1] + '</span></button>').join('');
+    const sc = body.scrollTop;
+    body.innerHTML = po.tab && po.data ? '<section class="sh-pane on" data-pane="' + po.tab + '">' + PO_PANES[po.tab]() + '</section>' : '';
+    body.scrollTop = sc;
+    if (sh) sh.classList.toggle('tool-open', !!po.tab);
+    $p('po-title').textContent = 'Poster · ' + (poName(po.type) || '').toLowerCase();
+    $p('po-foot').innerHTML = '<div class="sh-btns"><button type="button" class="btn btn-outline sh-ic" onclick="window.posterSave()" aria-label="Simpan">' + icon('download') + '<span>Simpan</span></button>' +
+      '<button type="button" class="btn btn-outline sh-ic only-desktop" onclick="window.posterCopy()" aria-label="Salin">' + icon('copy') + '<span>Salin</span></button>' +
+      '<button type="button" class="btn btn-primary" id="po-go" onclick="window.posterGo()"' + (po.data ? '' : ' disabled') + '>' + icon('share-2') + 'Bagikan</button></div>';
+    paintIcons();
+    requestAnimationFrame(poFit);
+  }
+  function poMsg(t) { const m = $p('po-msg'); if (!m) return; m.textContent = t || ''; m.classList.toggle('hide', !t); }
+  function poBusy(on) { const b = $p('po-busy'); if (b) b.classList.toggle('hide', !on); }
+  function poFit() {
+    const stage = $p('po-stage'), box = $p('po-box'); if (!stage || !box || !stage.clientHeight) return;
+    const cs = getComputedStyle(stage), padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight), padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const msg = $p('po-msg'), mh = msg && !msg.classList.contains('hide') ? msg.offsetHeight + 6 : 0;
+    const maxW = stage.clientWidth - padX, maxH = stage.clientHeight - padY - mh, r = po.ratio;
+    let hh = Math.max(120, maxH), w = hh / r;
+    if (w > maxW) { w = maxW; hh = w * r; }
+    box.style.width = Math.floor(w) + 'px'; box.style.height = Math.floor(hh) + 'px';
+  }
+  window.addEventListener('resize', function () { if ($p('po-stage')) requestAnimationFrame(poFit); });
+  let poTimer = 0;
+  function poRefresh() {
+    clearTimeout(poTimer);
+    poTimer = setTimeout(async function () {
+      if (!po.data || !kit()) return;
+      const my = ++po.token;
+      const cnv = await poDraw({ type: po.type, size: PP.size, style: PP.style });
+      const blob = await new Promise(r => cnv.toBlob(r, 'image/png'));
+      if (my !== po.token || !blob) return;
+      po.blob = blob; if (po.url) URL.revokeObjectURL(po.url); po.url = URL.createObjectURL(blob);
+      const im = $p('po-img'); if (im) im.src = po.url;
+      po.ratio = (PO_SIZES[PP.size] || 1920) / PO_W; poFit();
+    }, 60);
+  }
+
+  function loadResults(period) {
+    if (po.results[period] || po.results[period + ':loading']) return;
+    po.results[period + ':loading'] = true;
+    adminCall('getPosterResults', period, po.coachId).then(function (r) { po.results[period] = r; })
+      .catch(function (e) { window.showToast(waitErr(e)); })
+      .then(function () { delete po.results[period + ':loading']; poControls(); poRefresh(); });
+  }
+  function loadStory(id) {
+    po.storyId = String(id); po.story = null; poBusy(true);
+    adminCall('getPosterStory', id).then(function (st) { if (po.storyId === String(id)) po.story = st; })
+      .catch(function (e) { window.showToast(waitErr(e)); po.storyId = ''; })
+      .then(function () { poBusy(false); poControls(); poRefresh(); });
+  }
+  function loadData(coachId) {
+    po.busy = true; poBusy(true); poMsg('');
+    adminCall('getPosterData', { coachId: coachId || '', period: PP.period }).then(function (d) {
+      po.data = d; po.at = Date.now(); po.coachId = (d.coach && d.coach.id) || '';
+      po.results = {}; if (d.results) po.results[d.results.period] = d.results;
+      po.avatar = null;
+      if (d.avatar) { const im = new Image(); im.onload = poRefresh; im.src = d.avatar; po.avatar = im; }
+      if (availTypes().indexOf(po.type) === -1) po.type = 'promo';
+      if (po.type === 'kisah' && po.storyId && !(d.stories || []).some(x => x.id === po.storyId)) { po.story = null; po.storyId = ''; }
+      if (!d.coach) poMsg('Belum ada coach aktif. Tambahkan coach dulu di menu Coach.');
+    }).catch(function (e) { po.data = null; poMsg(waitErr(e)); })
+      .then(function () { po.busy = false; poBusy(false); poControls(); poRefresh(); if (po.type === 'kisah' && po.pendingStory) { const id = po.pendingStory; po.pendingStory = ''; loadStory(id); } });
+  }
+
+  /** Buka editor poster. type opsional ('kisah' + memberId dari halaman klien). */
+  window.posterOpen = function (type, memberId) {
+    if (window.posterOn === false) { window.showToast('Poster sedang dimatikan di Pengaturan.'); return; }
+    if (!kit()) { window.showToast('Poster belum siap. Muat ulang halaman.'); return; }
+    PP = PP || poPrefs();
+    if (type && PO_TYPES.indexOf(type) !== -1) po.type = type;
+    if (!isDeskP()) po.tab = '';
+    ensurePoShell();
+    openSheet('sheet-poster');
+    if (memberId) { po.type = 'kisah'; po.tab = isDeskP() ? 'isi' : po.tab; }
+    const fresh = po.data && Date.now() - po.at < 10 * 60 * 1000;
+    poControls();
+    if (fresh) { poRefresh(); if (memberId) loadStory(memberId); return; }
+    po.pendingStory = memberId ? String(memberId) : '';
+    loadData(po.coachId);
+  };
+  window.posterTab = function (t) { po.tab = po.tab === t && !isDeskP() ? '' : t; poControls(); };
+  window.posterSet = function (grp, val, on) {
+    const k = pk();
+    if (grp === 'type') { po.type = val; if (val === 'hasil') loadResults(PP.period); }
+    else if (grp === 'coach') { if (val !== po.coachId) { po.coachId = val; po.story = null; po.storyId = ''; loadData(val); } return; }
+    else if (grp === 'style') PP.style = val;
+    else if (grp === 'size') PP.size = val;
+    else if (grp === 'period') { PP.period = val; loadResults(val); }
+    else if (grp === 'pkg') {
+      let cur = pickedPkgs().map(p => String(p.id));
+      cur = on ? cur.concat([String(val)]).filter((x, i, a) => a.indexOf(x) === i) : cur.filter(x => x !== String(val));
+      if (cur.length > 3) { window.showToast('Maksimal 3 paket.'); poControls(); return; }
+      k.pkgs = cur;
+    } else if (grp === 'stat') {
+      let cur = pickedStats(); cur = on ? cur.concat([val]) : cur.filter(x => x !== val);
+      if (cur.length > 6) { window.showToast('Maksimal 6 angka.'); poControls(); return; }
+      k.stats = PO_STATS.map(x => x[0]).filter(x => cur.indexOf(x) !== -1);
+    } else if (grp === 'fact') { const cur = factsOn(); k.facts = on ? cur.concat([val]) : cur.filter(x => x !== val); }
+    else if (grp === 'storyf') { const cur = storyOn(); k.story = on ? cur.concat([val]) : cur.filter(x => x !== val); }
+    else if (grp === 'story') { loadStory(val); return; }
+    else if (grp === 'testi') k.testi = Number(val) || 0;
+    else if (grp === 'nophoto') po.photo = null;
+    else if (grp === 'wa' || grp === 'ig' || grp === 'qr') k[grp] = !!on;
+    poSave(); poControls(); poRefresh();
+  };
+  window.posterText = function (key, v) { pk()[key] = String(v || '').slice(0, 120); poSave(); poRefresh(); };
+  window.posterResetText = function () { const k = pk(); k.head = k.sub = k.cta = ''; poSave(); poControls(); poRefresh(); };
+  window.posterPick = function () { const f = $p('po-file'); if (f) { f.value = ''; f.click(); } };
+  window.posterFile = function (inp) {
+    const f = inp.files && inp.files[0]; if (!f) return;
+    const u = URL.createObjectURL(f), im = new Image();
+    im.onload = function () { po.photo = im; URL.revokeObjectURL(u); poControls(); poRefresh(); };
+    im.onerror = function () { URL.revokeObjectURL(u); window.showToast('Foto tidak bisa dibaca.'); };
+    im.src = u;
+  };
+  function poFname() { return 'poster-' + po.type + '-' + (PP.size === 'story' ? '9x16' : '4x5') + '.png'; }
+  window.posterSave = function () { if (!po.blob) return; kit().download(po.blob, poFname()); window.showToast('Poster disimpan. Di iPhone: tekan lama gambar → Simpan ke Foto.'); };
+  window.posterCopy = function () { if (po.blob) kit().copy(po.blob); };
+  window.posterGo = function () { if (!po.blob) return; const b = po.blob, n = poFname(); kit().sendFiles([{ blob: b, name: n }], function () { kit().download(b, n); }); };
+
+  // ── izin klien (portal → Saya): hasil boleh dipakai coach di poster ──
+  window.posterConsentHtml = function (desk) {
+    const p = window.myX && window.myX.profile;
+    if (!p || window.posterOn === false) return '';
+    const sw = '<label class="toggle"><input type="checkbox" id="pub-poster-ok"' + (p.poster ? ' checked' : '') + ' onchange="window.setPosterConsent(this)" aria-label="Hasil saya untuk poster coach"><span></span></label>';
+    if (desk) return '<div class="ds-row ds-static"><span class="grow"><b>Hasil saya untuk poster coach</b><span>Nama depan dan angka, tanpa foto</span></span>' + sw + '</div>';
+    return '<div class="card-flat row-between po-consent"><div><p class="li-title">Hasil saya untuk poster coach</p><p class="li-sub">Coach boleh memakai nama depan dan angka progres (berat, ukuran, kekuatan) di poster promosi. Foto tidak ikut.</p></div>' + sw + '</div>';
+  };
+  window.setPosterConsent = function (el) {
+    const p = window.myX && window.myX.profile; if (!p) return;
+    const on = !!el.checked, old = !!p.poster;
+    p.poster = on; savePortalCache();
+    optimistic({ q: { mode: 'member', fn: 'saveMyProfileCard', args: [{ poster: on }] }, ok: on ? 'Coach boleh memakai hasilmu di poster.' : 'Izin poster dimatikan.', label: 'Izin poster', undo: function () { p.poster = old; const x = $p('pub-poster-ok'); if (x) x.checked = old; savePortalCache(); } });
+  };
+
+  // Untuk tools/poster-check.js: gambar poster tanpa lembar, ambil kotak tata letak.
+  window.posterCheck = {
+    setData: function (d) { po.data = d; po.results = {}; if (d && d.results) po.results[d.results.period] = d.results; PP = PP || poPrefs(); },
+    data: function () { return po.data; },
+    setStory: function (s2) { po.story = s2; po.storyId = s2 ? 'x' : ''; },
+    types: function () { return availTypes(); },
+    draw: async function (type, size, style) { PP = PP || poPrefs(); const c2 = await poDraw({ type: type, size: size, style: style }); return { url: c2.toDataURL('image/png'), box: c2._po.box, foot: c2._po.foot, H: c2._po.H }; },
+    brand: function () { return poBrand(); }
+  };
+  })();
 })();
 </script>

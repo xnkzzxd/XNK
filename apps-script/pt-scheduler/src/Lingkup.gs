@@ -102,6 +102,10 @@ const COACH_FNS = {
   deleteMemberMeasurement: [['row', 'Progress', 0, 1]],
   getMemberShareData: ['m', 'x', 'x'],
   getMemberReport: ['m', 'x'],
+  // Fase AG: poster. Coach selalu memakai profil dan kliennya sendiri (_posterCoach_ membaca lingkup), kisah klien hanya klien sendiri.
+  getPosterData: ['x'],
+  getPosterResults: ['x', 'x'],
+  getPosterStory: ['m'],
   // Perpanjangan: klien sendiri, atau klien yang memilih coach ini.
   getRenewalRequests: ['x'],
   decideRenewal: ['rr', 'x'],
@@ -275,6 +279,7 @@ function _adminMoreForCoach_(token) {
         renewals: _scopeByMember_(part(function () { return getRenewalRequests(token); }), ids),
         finance: finance,
         shareEnabled: _shareEnabled_(),
+        posterEnabled: _posterEnabled_(),   // Fase AG
         revenue: null,
         packageTrend: null,
         hub: part(function () { return _coachHub_(new Date(), null); }),

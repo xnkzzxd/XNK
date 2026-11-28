@@ -42,6 +42,8 @@ function _pfFrom_(row) {
     stat: stat.length >= PF_LIMITS.statMin ? stat : PF_STATS_DEFAULT.slice(),
     badge: list(j.b, null, PF_LIMITS.badgeMax),
     foto: j.f === true,
+    // Fase AG: klien mengizinkan coach memakai hasilnya (nama depan + angka) di poster. Bawaan tidak.
+    poster: j.p === true,
     notifSeen: c('notif').trim()
   };
 }
@@ -67,6 +69,7 @@ function _pfValidate_(data, earned) {
     out.badge = b;
   }
   if (data.foto !== undefined) out.foto = data.foto === true;
+  if (data.poster !== undefined) out.poster = data.poster === true;
   return out;
 }
 
@@ -76,9 +79,9 @@ function _pfWrite_(m, cur, v) {
   const put = function(k, val) { m.sheet.getRange(m.rowNum, PF_COLS[k]).setNumberFormat('@').setValue(val); };
   if (v.panggilan !== undefined) put('panggilan', v.panggilan);
   if (v.motto !== undefined) put('motto', v.motto);
-  const n = Object.assign({ aksen: cur.aksenSet === false ? undefined : cur.aksen, gaya: cur.gaya, stat: cur.stat, badge: cur.badge, foto: cur.foto }, v);
+  const n = Object.assign({ aksen: cur.aksenSet === false ? undefined : cur.aksen, gaya: cur.gaya, stat: cur.stat, badge: cur.badge, foto: cur.foto, poster: cur.poster }, v);
   // Warna yang belum pernah dipilih tetap kosong (JSON.stringify membuang undefined), supaya warna coach tetap bawaan.
-  put('kartu', JSON.stringify({ a: n.aksen, g: n.gaya, s: n.stat, b: n.badge, f: n.foto === true }));
+  put('kartu', JSON.stringify({ a: n.aksen, g: n.gaya, s: n.stat, b: n.badge, f: n.foto === true, p: n.poster === true || undefined }));
 }
 
 /** Nama yang tampil di kartu: nama panggilan, kalau kosong nama depan. */
@@ -135,7 +138,7 @@ function _portalXFor_(row, pre) {
     level: { l: 'Level', v: String(level.level) }
   };
   const profile = {
-    nama: _pfDisplayName_(row, pf), panggilan: pf.panggilan, motto: pf.motto, aksen: pf.aksen, aksenSet: pf.aksenSet, gaya: pf.gaya, foto: pf.foto,
+    nama: _pfDisplayName_(row, pf), panggilan: pf.panggilan, motto: pf.motto, aksen: pf.aksen, aksenSet: pf.aksenSet, gaya: pf.gaya, foto: pf.foto, poster: pf.poster,
     stat: pf.stat, badge: pf.badge.filter(function(b) { return earned.some(function(e) { return e.id === b; }); }),
     statOptions: PF_STATS.map(function(k) { return { k: k, l: statVal[k].l, v: statVal[k].v }; }),
     options: { aksen: PF_ACCENTS, gaya: PF_STYLES, limits: PF_LIMITS }
@@ -187,7 +190,7 @@ function saveMyProfileCard(memberToken, data) {
   if (!_throttle_('pf_' + id, 2)) throw new Error('Tunggu sebentar sebelum menyimpan lagi.');
   _locked_(function() { const m = _memberRowOrThrow_(id); _pfWrite_(m, _pfFrom_(m.row), v); });
   const pf = _pfFrom_(_memberRowOrThrow_(id).row);
-  return _bumpAfter_(id, { panggilan: pf.panggilan, motto: pf.motto, aksen: pf.aksen, gaya: pf.gaya, stat: pf.stat, badge: pf.badge, foto: pf.foto });
+  return _bumpAfter_(id, { panggilan: pf.panggilan, motto: pf.motto, aksen: pf.aksen, gaya: pf.gaya, stat: pf.stat, badge: pf.badge, foto: pf.foto, poster: pf.poster });
 }
 
 /** Klien: lonceng sudah dibuka. Hanya menyimpan waktu; isi lonceng dihitung ulang saat data berikutnya dimuat. */

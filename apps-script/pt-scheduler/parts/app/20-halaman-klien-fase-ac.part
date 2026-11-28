@@ -349,7 +349,7 @@
     $('cpm-title').textContent = 'Menu klien';
     setHTML('cpm-body', group('Tambah', row('pr', 'list-plus', 'PR baru', '') + row('tes', 'timer', 'Tes kebugaran', '') + row('lewat', 'calendar-check', 'Latihan yang lewat', 'Catat latihan hari sebelumnya') + row('catatan', 'notebook-pen', 'Catatan privat', '')) +
       group('Kirim lewat WhatsApp', send) +
-      group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('laporan', 'file-text', 'Laporan PDF', 'Rangkuman progres untuk klien') +
+      group('Klien', row('ubah', 'pencil', 'Ubah data', 'Nama, nomor, paket, sisa sesi') + row('laporan', 'file-text', 'Laporan PDF', 'Rangkuman progres untuk klien') + (window.posterOn !== false ? row('poster', 'image', 'Poster kisah klien', 'Butuh izin klien di portal') : '') +
         row('tahan', 'pause', 'Tahan klien', 'Cuti, sakit, atau berhenti') + row('hapus', 'trash-2', 'Hapus klien', '', true)));   // Fase AD: laporan, tahan
     openSheet('sheet-cp-more');
   };
@@ -359,7 +359,7 @@
       pr: () => window.addTaskFor(id), tes: () => window.openCareTests(id), lewat: () => window.workoutOpenAdmin(id, '', '', true), catatan: () => window.openCareNotes(id),
       'wa-latihan': () => window.workoutSummaryWA(id), 'wa-tes': () => window.sendTestResult(id), 'wa-form': () => window.cpHealthRemind(id),
       ubah: () => window.openEditProfileModal(), hapus: () => window.openDeleteConfirmModal(),
-      laporan: () => window.reportOpen('admin', id), tahan: () => window.openHoldSheet(id)   // Fase AD
+      laporan: () => window.reportOpen('admin', id), poster: () => window.posterOpen('kisah', id), tahan: () => window.openHoldSheet(id)   // Fase AD
     }[k];
     window.closeModal();
     if (go) setTimeout(go, 120);

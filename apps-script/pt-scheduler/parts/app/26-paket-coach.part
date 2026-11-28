@@ -72,5 +72,3 @@
       (link && (off.length || cl.max) ? '<a class="btn btn-primary btn-block plan-up" href="' + h(link) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Naik paket via WhatsApp</a>' : '') +
       '<p class="plan-foot">' + icon('info') + 'Klien cuti tidak dihitung</p></div>';
   };
-})();
-</script>

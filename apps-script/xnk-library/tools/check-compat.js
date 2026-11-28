@@ -28,6 +28,8 @@ const EXPECTED = {
   "getAppSettings returns today's defaults until the admin changes something": 'alamat QR per spreadsheet',
   'updateAppSettings saves every field, and getAppSettings reflects it back': 'alamat QR per spreadsheet',
   'QR address: https only, empty falls back to the default': 'alamat QR per spreadsheet',
+  // Fase AG: poster "XNK Coach" (menjual XNK ke coach lain) hanya untuk pemilik di xnk.my.id.
+  'owner on xnk.my.id gets the XNK Coach poster; prices equal the hub landing': 'poster XNK Coach hanya di produksi',
   // Judul dan ikon halaman Apps Script = nama usaha spreadsheet itu; landing pemilik tidak ikut.
   'the page title is XNK Personal Training': 'nama usaha per spreadsheet',
   'doGet serves only real pages; unknown views fall back to Index': 'landing pemilik tidak ikut',

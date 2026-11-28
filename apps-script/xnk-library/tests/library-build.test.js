@@ -121,3 +121,12 @@ test('nomor WA pemilik XNK tidak ikut ke Library: tombol WA klien memakai No WA 
   for (const [f, t] of Object.entries(files)) assert.ok(!/6288221254305/.test(t), f + ' masih memuat nomor WA pemilik');
   assert.match(files['App.html'], /const COACH_WA_NUMBER = '';/);
 });
+
+test('poster coach (Fase AG): merek coach + tanda kecil di Library, poster XNK Coach hanya di produksi', () => {
+  const { files } = lib.build();
+  assert.match(files['PosterData.gs'], /^const POSTER_XNK = null;$/m);
+  assert.match(files['App.html'], /const poBrand = function \(\) \{ return window\.brandName\(\); \};/);
+  assert.match(files['Bagikan.html'], /mark: function \(\) \{ return L\.id\.poweredBy; \}/);
+  const prod = fs.readFileSync(path.join(SRC, 'PosterData.gs'), 'utf8');
+  assert.match(prod, /^const POSTER_XNK = \{ title: 'XNK Coach'/m);
+});

@@ -130,6 +130,7 @@
       else if (kind === 'client') window.openAddMemberModal();
       else if (kind === 'coach') window.openAddCoachModal();
       else if (kind === 'content') window.navigate('content');
+      else if (kind === 'poster') window.posterOpen();   // Fase AG
     }, 120);
   };
 

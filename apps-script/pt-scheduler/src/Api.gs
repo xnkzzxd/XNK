@@ -29,7 +29,7 @@ function _apiTable_() {
     hubSiteUrl: hubSiteUrl,
     hubReadonly: hubReadonly,
     hubPlan: hubPlan,
-    // admin: admin token (148)
+    // admin: admin token (151)
     checkAdminSession: checkAdminSession,
     changeAdminPin: changeAdminPin,
     getAdminBootstrap: getAdminBootstrap,
@@ -146,6 +146,9 @@ function _apiTable_() {
     deleteClientFood: deleteClientFood,
     saveFoodFeedback: saveFoodFeedback,
     getMemberReport: getMemberReport,
+    getPosterData: getPosterData,
+    getPosterResults: getPosterResults,
+    getPosterStory: getPosterStory,
     getMemberProgress: getMemberProgress,
     saveMemberMeasurement: saveMemberMeasurement,
     deleteMemberMeasurement: deleteMemberMeasurement,

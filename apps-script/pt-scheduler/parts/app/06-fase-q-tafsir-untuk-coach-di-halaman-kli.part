@@ -736,6 +736,7 @@
     if (window.coaches.length) {
       html += '<button type="button" class="card-flat list-item interactive" style="width:100%;margin-bottom:16px;text-align:left" onclick="window.openHoursPage()">' + icon('calendar-clock') + '<span class="grow"><span class="li-title" style="display:block">Jam kerja &amp; cuti</span><span class="li-sub">Atur jam tersedia dan hari libur</span></span>' + icon('chevron-right') + '</button>';
     }
+    if (window.posterOn !== false) html += '<button type="button" class="card-flat list-item interactive" id="coach-poster" style="width:100%;margin-bottom:16px;text-align:left" onclick="window.posterOpen()">' + icon('image') + '<span class="grow"><span class="li-title" style="display:block">Buat poster</span><span class="li-sub">Promo paket, slot kosong, profil, testimoni, hasil coaching</span></span>' + icon('chevron-right') + '</button>';   // Fase AG
     if (!list.length) {
       html += emptyState('dumbbell', 'Belum ada coach', 'Tambahkan coach untuk mulai membagi sesi.');
     } else {
