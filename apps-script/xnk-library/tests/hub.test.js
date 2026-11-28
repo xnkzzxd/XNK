@@ -480,3 +480,19 @@ test('landing (T-2265, tampilan baru): masuk di lembar, fitur bertab, huruf send
   // Bagian lama "Cara kerja" sudah masuk ke Daftar (4 langkah); tidak ada tautan ke bagian yang hilang.
   for (const m of html.matchAll(/href="#([a-z-]+)"/g)) assert.ok(html.includes('id="' + m[1] + '"'), 'tujuan tautan ada: #' + m[1]);
 });
+
+test('halaman kota: /personal-trainer/<kota>/ untuk pencarian lokal, di sitemap dan llms.txt', () => {
+  const { files } = hub.build({ coaches: [
+    { slug: 'satu', brand: 'Satu Fit', exec: EXEC(1), place: { name: 'Gym A', city: 'Purwokerto' } },
+    { slug: 'dua', brand: 'Dua', exec: EXEC(2), place: { name: 'Gym B', city: 'Purwokerto' } },
+    { slug: 'tiga', brand: 'Tiga', exec: EXEC(3), place: { name: 'Gym C', city: 'Jakarta Selatan' }, inactive: true },
+  ] });
+  const p = files['personal-trainer/purwokerto/index.html'];
+  assert.ok(p && p.includes('<title>Personal Trainer Purwokerto · 2 coach</title>') && p.includes('/satu/info/') && p.includes('/dua/info/'));
+  assert.ok(!files['personal-trainer/jakarta-selatan/index.html'], 'coach tidak aktif tidak dihitung');
+  assert.ok(files['personal-trainer/index.html'].includes('/personal-trainer/purwokerto/'));
+  assert.ok(files['sitemap.xml'].includes('https://xnk.web.id/personal-trainer/purwokerto/'));
+  assert.ok(files['llms.txt'].includes('Personal Trainer Purwokerto'));
+  assert.ok(files['satu/info/index.html'].includes('<title>Satu Fit · Personal Trainer Purwokerto</title>'));
+  assert.match(hub.slugError('personal-trainer') || '', /./);
+});

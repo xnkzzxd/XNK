@@ -24,7 +24,7 @@ const SITE = path.join(HERE, 'hub-site');
 
 // Kata yang dipakai sistem atau mudah menipu; dan nama berkas di akar situs.
 const RESERVED = ['_hub', '_lib', '_app', 'adminxnk', 'admin', 'api', 'app', 'klien', 'demo', 'l', 'login', 'daftar', 'masuk', 'assets', 'static', 'www', 'xnk', 'hub',
-  'index', '404', 'cname', 'img', 'fonts', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next'];
+  'index', '404', 'cname', 'img', 'fonts', 'coach', 'coaches', 'support', 'help', 'bantuan', 'legacy', 'next', 'personal-trainer'];
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28})[a-z0-9]$/;
 // T-2243: nama secret clasp coach (CLASP_<SLUG>); disimpan di hub.json saat slug diganti supaya secret lama tetap dipakai.
 const SECRET_RE = /^CLASP_[A-Z0-9_]{3,40}$/;
@@ -443,7 +443,9 @@ function infoPage(c) {
   let t = fs.readFileSync(path.join(SITE, 'info.html'), 'utf8');
   const url = `${HUB_ORIGIN}/${c.slug}/info/`;
   const pl = c.place || null;
-  const desc = `${c.brand}: personal trainer${pl ? ` di ${pl.name}, ${pl.city}` : ''}. Lihat paket, harga, dan jam kosong, lalu daftar online.`;
+  const desc = pl ? `${c.brand}, personal trainer di ${pl.city} (${pl.name}). Latihan privat, program dan gizi pribadi. Lihat paket, harga, dan jam kosong, lalu daftar online.`
+    : `${c.brand}: personal trainer. Lihat paket, harga, dan jam kosong, lalu daftar online.`;
+  const ptTitle = pl ? `${c.brand} · Personal Trainer ${pl.city}` : `${c.brand} · Personal trainer`;
   // T-2258: tempat latihan dari hub.json langsung di HTML (tampil sebelum data coach dimuat). Tanpa tempat = bagian
   // tersembunyi yang diisi skrip dari kolom Lokasi profil coach, bila ada.
   const maps = pl ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(pl.name + ', ' + pl.city) : '#';
@@ -457,7 +459,7 @@ function infoPage(c) {
   const swaps = {
     '__ACCENT_ATTR__': c.accent ? ` data-accent="${c.accent}"` : '',
     '__THEME_KEY__': JSON.stringify(c.storageSlug + ':xnk_theme'),
-    '__TITLE__': esc(c.brand + ' · Personal trainer'),
+    '__TITLE__': esc(ptTitle), '__EYEBROW__': esc(pl ? 'Personal trainer · ' + pl.city : 'Personal trainer'),
     '__DESC__': esc(desc), '__URL__': esc(url), '__BRAND__': esc(c.brand), '__KLIEN__': esc(cfg.klien),
     '<!--OGIMAGE-->': logo ? `<meta property="og:image" content="${esc(HUB_ORIGIN + logo)}">` : '',
     '<!--ICON-->': `<link rel="icon" href="${logo || `/${c.slug}/icon.svg`}" type="${logo ? c.logoFile.type : 'image/svg+xml'}">`,
@@ -471,7 +473,7 @@ function infoPage(c) {
     t = t.split(k).join(v);
   }
   if (/__[A-Z_]+__/.test(t)) throw new Error('build-hub: penanda tersisa di halaman info ' + c.slug);
-  t = t.replace('</head>', () => infoLd(c, url, desc, logo) + '</head>');
+  t = t.replace('</head>', () => infoLd(c, url, desc, logo, ptTitle) + '</head>');
   // Foto coach dari Drive (lh3.googleusercontent.com / drive.google.com); data hanya ke Apps Script coach.
   return cspStatic(t, { connect: 'https://script.google.com https://script.googleusercontent.com', img: 'https://drive.google.com https://*.googleusercontent.com' });
 }
@@ -654,8 +656,75 @@ function landingLd(landing) {
   return landing.replace('</head>', () => ld.map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>\n').join('') + '</head>');
 }
 
+/** Kota → bagian alamat: huruf kecil, tanpa aksen, tanda hubung. */
+function citySlug(city) {
+  return String(city).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'kota';
+}
+
+/** Coach aktif bertempat, dikelompokkan per kota: { slug: { city, coaches } }. */
+function cityGroups(hub) {
+  const g = {};
+  for (const c of hub.coaches) {
+    if (c.inactive || !c.place || !c.place.city) continue;
+    const k = citySlug(c.place.city);
+    (g[k] = g[k] || { city: c.place.city, coaches: [] }).coaches.push(c);
+  }
+  return g;
+}
+
+/**
+ * SEO lokal: /personal-trainer/<kota>/ (satu halaman per kota, untuk pencarian "personal trainer <kota>") dan
+ * /personal-trainer/ (semua kota). HTML statis tanpa skrip, hanya data publik hub.json.
+ */
+function cityPages(hub) {
+  const groups = cityGroups(hub), out = {};
+  const keys = Object.keys(groups).sort();
+  if (!keys.length) return out;
+  const css = '<style>:root{color-scheme:light dark;--bg:#fafaf9;--fg:#0b0b0b;--mut:#5f5f5b;--line:#e2e2de;--card:#fff}' +
+    '@media (prefers-color-scheme:dark){:root{--bg:#0b0b0b;--fg:#f5f5f3;--mut:#a3a39e;--line:#2a2a28;--card:#151514}}' +
+    '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:1rem/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}' +
+    'main{max-width:46rem;margin:0 auto;padding:2rem 1rem 3rem}nav.crumb{font-size:.875rem;color:var(--mut)}nav.crumb a{color:inherit}' +
+    'h1{font-size:clamp(1.75rem,6vw,2.5rem);line-height:1.15;margin:.75rem 0}p.lead{color:var(--mut)}' +
+    'ul.list{list-style:none;padding:0;margin:1.5rem 0;display:grid;gap:.75rem}ul.list a{display:block;padding:1rem 1.1rem;min-height:44px;border:1px solid var(--line);border-radius:1.1rem;background:var(--card);color:inherit;text-decoration:none}' +
+    'ul.list b{display:block;font-size:1.1rem}ul.list span{color:var(--mut);font-size:.9rem}footer{margin-top:2rem;font-size:.875rem;color:var(--mut)}footer a{color:inherit}</style>';
+  const page = (title, desc, url, body, ld) => cspStatic(['<!doctype html>', '<html lang="id">', '<head>', '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">', `<title>${esc(title)}</title>`,
+    `<meta name="description" content="${esc(desc)}">`, `<link rel="canonical" href="${esc(url)}">`,
+    '<meta property="og:type" content="website">', '<meta property="og:locale" content="id_ID">', `<meta property="og:title" content="${esc(title)}">`,
+    `<meta property="og:description" content="${esc(desc)}">`, `<meta property="og:url" content="${esc(url)}">`,
+    `<meta property="og:image" content="${HUB_ORIGIN}/img/og.jpg">`, '<meta name="twitter:card" content="summary_large_image">',
+    '<link rel="icon" type="image/png" href="/img/icon-192.png">', css,
+    ...ld.map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>'),
+    '</head>', '<body>', '<main>', body,
+    `<footer>Coach memakai <a href="${HUB_ORIGIN}/">XNK</a> untuk jadwal, program latihan, gizi, dan progres klien.</footer>`,
+    '</main>', '</body>', '</html>', ''].join('\n'));
+  for (const k of keys) {
+    const { city, coaches } = groups[k];
+    const url = `${HUB_ORIGIN}/personal-trainer/${k}/`;
+    const title = `Personal Trainer ${city} · ${coaches.length} coach`;
+    const desc = `Cari personal trainer di ${city}: ${coaches.map(c => c.brand).join(', ')}. Lihat tempat latihan, paket, harga, dan jam kosong, lalu daftar online.`;
+    const items = coaches.map(c => `<li><a href="/${esc(c.slug)}/info/"><b>${esc(c.brand)}</b><span>Personal trainer · ${esc(c.place.name)}, ${esc(city)}</span></a></li>`).join('\n');
+    const body = `<nav class="crumb" aria-label="Remah roti"><a href="/">Beranda</a> › <a href="/personal-trainer/">Personal trainer</a> › ${esc(city)}</nav>\n` +
+      `<h1>Personal Trainer di ${esc(city)}</h1>\n<p class="lead">${coaches.length} personal trainer di ${esc(city)}. Pilih coach untuk melihat tempat latihan, paket, harga, dan jam kosong.</p>\n<ul class="list">\n${items}\n</ul>`;
+    const ld = [{ '@context': 'https://schema.org', '@type': 'ItemList', name: 'Personal Trainer ' + city, url,
+      itemListElement: coaches.map((c, i) => ({ '@type': 'ListItem', position: i + 1, url: `${HUB_ORIGIN}/${c.slug}/info/`, name: c.brand })) },
+    { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Beranda', item: HUB_ORIGIN + '/' },
+      { '@type': 'ListItem', position: 2, name: 'Personal trainer', item: HUB_ORIGIN + '/personal-trainer/' },
+      { '@type': 'ListItem', position: 3, name: city, item: url }] }];
+    out[`personal-trainer/${k}/index.html`] = page(title, desc, url, body, ld);
+  }
+  const url = HUB_ORIGIN + '/personal-trainer/';
+  const items = keys.map(k => `<li><a href="/personal-trainer/${k}/"><b>Personal Trainer ${esc(groups[k].city)}</b><span>${groups[k].coaches.length} coach</span></a></li>`).join('\n');
+  out['personal-trainer/index.html'] = page('Personal Trainer per kota · XNK', 'Cari personal trainer di kota Anda: ' + keys.map(k => groups[k].city).join(', ') + '. Lihat paket, harga, dan jam kosong, lalu daftar online.', url,
+    `<nav class="crumb" aria-label="Remah roti"><a href="/">Beranda</a> › Personal trainer</nav>\n<h1>Personal Trainer per kota</h1>\n<p class="lead">Pilih kota untuk melihat personal trainer di sana.</p>\n<ul class="list">\n${items}\n</ul>`,
+    [{ '@context': 'https://schema.org', '@type': 'ItemList', name: 'Personal Trainer per kota', url,
+      itemListElement: keys.map((k, i) => ({ '@type': 'ListItem', position: i + 1, url: `${HUB_ORIGIN}/personal-trainer/${k}/`, name: 'Personal Trainer ' + groups[k].city })) }]);
+  return out;
+}
+
 /** SEO/GEO: data terstruktur halaman info coach (bisnis lokal + remah roti). Hanya data publik dari hub.json. */
-function infoLd(c, url, desc, logo) {
+function infoLd(c, url, desc, logo, ptTitle) {
   const pl = c.place || null;
   const biz = { '@context': 'https://schema.org', '@type': ['LocalBusiness', 'HealthAndBeautyBusiness'], '@id': url + '#coach',
     name: c.brand, url, description: desc, inLanguage: 'id', image: logo ? HUB_ORIGIN + logo : HUB_ORIGIN + '/img/og.jpg',
@@ -666,9 +735,10 @@ function infoLd(c, url, desc, logo) {
   else if (c.instagramUrl) biz.sameAs = [c.instagramUrl];
   const crumbs = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
     { '@type': 'ListItem', position: 1, name: 'Beranda', item: HUB_ORIGIN + '/' },
-    { '@type': 'ListItem', position: 2, name: c.brand, item: url }] };
+    ...(pl ? [{ '@type': 'ListItem', position: 2, name: 'Personal Trainer ' + pl.city, item: `${HUB_ORIGIN}/personal-trainer/${citySlug(pl.city)}/` }] : []),
+    { '@type': 'ListItem', position: pl ? 3 : 2, name: c.brand, item: url }] };
   const meta = '<meta property="og:locale" content="id_ID">\n' +
-    `<meta name="twitter:title" content="${esc(c.brand + ' · Personal trainer')}">\n<meta name="twitter:description" content="${esc(desc)}">\n` +
+    `<meta name="twitter:title" content="${esc(ptTitle)}">\n<meta name="twitter:description" content="${esc(desc)}">\n` +
     '<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">\n';
   return meta + [biz, crumbs].map(o => '<script type="application/ld+json">' + JSON.stringify(o).replace(/</g, '\\u003c') + '</script>\n').join('');
 }
@@ -689,6 +759,8 @@ function llmsTxt(hub, desc) {
       L.push(`- [${c.brand}](${HUB_ORIGIN}/${c.slug}/info/): personal trainer${pl}; paket, harga, jam kosong, daftar online`);
     }
   }
+  const g = cityGroups(hub), ks = Object.keys(g).sort();
+  if (ks.length) { L.push('', '## Personal trainer per kota', ''); for (const k of ks) L.push(`- [Personal Trainer ${g[k].city}](${HUB_ORIGIN}/personal-trainer/${k}/): ${g[k].coaches.map(c => c.brand).join(', ')}`); }
   L.push('', '## Opsional', '', `- [Sitemap](${HUB_ORIGIN}/sitemap.xml)`, '');
   return L.join('\n');
 }
@@ -703,10 +775,11 @@ function seoFiles(hub, desc) {
   const robots = ['User-agent: *', 'Allow: /', 'Disallow: /adminxnk/', 'Disallow: /_hub/', 'Disallow: /_lib/']
     .concat(...active.map(c => [`Disallow: /${c.slug}/`, `Allow: /${c.slug}/info/`]))
     .concat(['', `Sitemap: ${HUB_ORIGIN}/sitemap.xml`, '']).join('\n');
-  const urls = [HUB_ORIGIN + '/'].concat(active.map(c => `${HUB_ORIGIN}/${c.slug}/info/`));
+  const cities = Object.keys(cityGroups(hub)).sort();
+  const urls = [HUB_ORIGIN + '/'].concat(cities.length ? [HUB_ORIGIN + '/personal-trainer/'] : [], cities.map(k => `${HUB_ORIGIN}/personal-trainer/${k}/`), active.map(c => `${HUB_ORIGIN}/${c.slug}/info/`));
   const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
     urls.map(u => `  <url><loc>${esc(u)}</loc></url>`).join('\n') + '\n</urlset>\n';
-  return { 'robots.txt': robots, 'sitemap.xml': sitemap, 'llms.txt': llmsTxt(hub, desc) };
+  return Object.assign({ 'robots.txt': robots, 'sitemap.xml': sitemap, 'llms.txt': llmsTxt(hub, desc) }, cityPages(hub));
 }
 
 /** build-tenant.js dari checkout XNK lain (commit coach itu), atau milik build ini. */
@@ -726,7 +799,7 @@ function write(outDir, files) {
   }
 }
 
-module.exports = { build, write, readHub, IG_RE, WA_RE, slugError, readLogo, cleanPlace, PLACE_MAX, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles, inactiveFiles };
+module.exports = { citySlug, build, write, readHub, IG_RE, WA_RE, slugError, readLogo, cleanPlace, PLACE_MAX, imageKind, imageSize, RESERVED, SLUG_RE, SECRET_RE, CSP_APP, ACCENTS, ACCENT_NAMES, LOGO_MAX, VAPID_RE, pushPage, aliasFiles, inactiveFiles };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
