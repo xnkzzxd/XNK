@@ -1,0 +1,70 @@
+  // ── Fase AF (T-2602): paket coach Starter / Pro / Studio ──────────────────────────────────────────────────────
+  // window.adminPlan datang dari getAdminBootstrap.plan (null = tanpa batas: xnk.my.id, coach gratis). Server yang menjaga
+  // (src/Plan.gs); di sini hanya kartu pemakaian di Pengaturan → Akun, menu yang terkunci tampil abu dengan pil paket,
+  // dan lembar "Tersedia di Pro" dengan tombol WhatsApp ke pengelola XNK.
+  const PLAN_LABEL = { finance: 'Keuangan', nutrition: 'Gizi', care: 'Asesmen & catatan sesi', photos: 'Foto progres', report: 'Laporan PDF',
+    share: 'Kartu bagikan', content: 'Info & tips', programAuto: 'Program otomatis', telegramFull: 'Semua pengingat WhatsApp', templates: 'Template program',
+    classes: 'Kelas grup', coachShare: 'Bagi hasil coach', multiCoach: 'Banyak coach' };
+  const PLAN_STUDIO = ['classes', 'coachShare', 'multiCoach'];
+  const PLAN_FEATS = Object.keys(PLAN_LABEL);
+  window.adminPlan = (function () { try { return JSON.parse(_lsGet('xnk_admin_plan') || 'null'); } catch (e) { return null; } })();
+  window.setAdminPlan = function (p) {
+    const was = JSON.stringify(window.adminPlan || null);
+    window.adminPlan = p && p.tier ? p : null;
+    if (window.adminPlan) _lsSet('xnk_admin_plan', JSON.stringify(window.adminPlan)); else _lsSet('xnk_admin_plan', null);
+    if (was !== JSON.stringify(window.adminPlan) && ui.mode === 'admin') buildChrome();
+  };
+  /** true bila fitur ini terkunci dan sudah ditegakkan. */
+  window.planLocked = function (f) {
+    const p = window.adminPlan;
+    return !!(p && p.enforced && (p.on || []).indexOf(f) === -1);
+  };
+  window.planNeed = function (f) { return PLAN_STUDIO.indexOf(f) !== -1 ? 'Studio' : 'Pro'; };
+  /** Pil kecil untuk baris menu yang terkunci. */
+  window.planPill = function (f) { return '<span class="plan-pill">' + h(window.planNeed(f)) + '</span>'; };
+  function upgradeLink(f) {
+    const p = window.adminPlan || {}, wa = String(p.upgradeWa || '').replace(/\D/g, '');
+    if (!wa) return '';
+    const txt = 'Halo, saya ingin ' + (f ? 'memakai ' + PLAN_LABEL[f] + ' (paket ' + window.planNeed(f) + ')' : 'naik paket') + '. Paket saya sekarang ' + (p.name || p.tier) + '.';
+    return 'https://wa.me/' + wa + '?text=' + encodeURIComponent(txt);
+  }
+  window.planLockedOpen = function (f) {
+    $('pl-title').textContent = 'Tersedia di ' + window.planNeed(f);
+    $('pl-sub').textContent = (PLAN_LABEL[f] || 'Fitur ini') + ' belum termasuk paket ' + ((window.adminPlan || {}).name || 'Anda') + '. Data lama tetap aman dan muncul lagi saat paket dinaikkan.';
+    const link = upgradeLink(f);
+    $('pl-wa').classList.toggle('hide', !link);
+    if (link) $('pl-wa').href = link;
+    window.openSheet('sheet-plan');
+  };
+  /** Jawaban server code 'plan*' (gerbang Plan.gs): buka lembar untuk fitur dari nama fungsinya bila diketahui. */
+  window.planRefused = function (err) {
+    if (!err || !/^plan/.test(String(err.code || ''))) return false;
+    if (err.code === 'plan') setTimeout(function () { window.planLockedOpen(''); }, 50);
+    return true;
+  };
+  function meter(label, used, max) {
+    const pct = max ? Math.min(100, Math.round(used / max * 100)) : 0, full = max && used > max;
+    return '<div class="plan-m"><div class="plan-mh"><span>' + h(label) + '</span><b' + (full ? ' class="txt-danger"' : '') + '>' + h(used) + ' / ' + (max ? h(max) : '∞') + '</b></div>' +
+      (max ? '<div class="plan-bar' + (full ? ' full' : '') + '"><i style="width:' + Math.max(3, pct) + '%"></i></div>' : '') + '</div>';
+  }
+  window.planCardHtml = function () {
+    const p = window.adminPlan;
+    if (!p || window.isCoachRole()) return '';
+    const off = PLAN_FEATS.filter(function (f) { return (p.on || []).indexOf(f) === -1; });
+    const cl = p.clients || {}, co = p.coaches || {};
+    const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10);
+    const warn = !p.enforced && p.enforceFrom && p.enforceFrom > today;
+    const fmt = function (d) { try { return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return d; } };
+    const over = cl.max && cl.used > cl.max;
+    const link = upgradeLink('');
+    return '<div class="card-flat stack plan-card"><div class="plan-top"><p class="li-title">Paket Anda</p><span class="plan-tier">' + h(p.name || p.tier) + '</span></div>' +
+      meter('Klien aktif', cl.used || 0, cl.max || 0) + meter('Coach', co.used || 0, co.max || 0) +
+      (warn ? '<p class="plan-warn">' + icon('info') + '<span>Paket ' + h(p.name) + ' berlaku penuh mulai <b>' + h(fmt(p.enforceFrom)) + '</b>.' +
+        (over ? ' Klien aktif sekarang ' + h(cl.used) + ', batasnya ' + h(cl.max) + ': sesudah tanggal itu klien baru belum bisa ditambah.' : '') +
+        (off.length ? ' Fitur yang belum termasuk akan disembunyikan; datanya tetap aman.' : '') + '</span></p>' : '') +
+      (off.length ? '<p class="li-sub">Belum termasuk: ' + h(off.map(function (f) { return PLAN_LABEL[f]; }).join(', ')) + '.</p>' : '<p class="li-sub">Semua fitur termasuk paket Anda.</p>') +
+      (link && (off.length || cl.max) ? '<a class="btn btn-primary btn-block" href="' + h(link) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Naik paket via WhatsApp</a>' : '') +
+      '<p class="li-sub">Klien aktif = masih punya sisa sesi atau booking; klien yang cuti tidak dihitung.</p></div>';
+  };
+})();
+</script>

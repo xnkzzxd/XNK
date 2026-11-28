@@ -300,6 +300,12 @@
   @media (hover: hover) { .menu button:not(:disabled):hover { background: var(--soft); } }
   dialog { border: 1px solid var(--line); border-radius: 14px; padding: 20px; background: var(--card); color: var(--fg); box-shadow: var(--shadow); width: min(400px, calc(100vw - 32px)); }
   dialog::backdrop { background: rgba(0,0,0,.3); }
+  #dlgPlan { width: min(520px, calc(100vw - 32px)); }
+  .pgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 2px 12px; margin: 0 0 14px; }
+  #dlgPlan .pchk { display: flex; flex-direction: row; margin: 0; padding: 0; align-items: center; gap: 8px; min-height: 36px; font-size: .9rem; color: var(--mut); cursor: pointer; }
+  #dlgPlan .pchk.chg { color: var(--fg); font-weight: 700; }
+  #dlgPlan .pchk input { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; flex: none; accent-color: var(--fg); }
+  #dlgPlan .two .btn { min-height: 44px; }
   dialog h3 { margin: 0 0 6px; font-size: 1.05rem; }
   dialog p { margin: 0 0 18px; color: var(--mut); font-size: .9rem; white-space: pre-line; }
   dialog .acts { justify-content: flex-end; }
@@ -449,6 +455,7 @@
     <div class="acts"><button class="btn" value="no" id="dlgNo">Batal</button><button class="btn primary" value="ok" id="dlgOk">OK</button></div>
   </form>
 </dialog>
+<dialog id="dlgPlan" aria-label="Paket & fitur"></dialog>
 <div class="tip hide" id="tip" role="tooltip"></div>
 <div class="toast" id="dm" role="status" aria-live="polite"></div>
 <div class="busybar" id="bb" aria-hidden="true"><i></i></div>
@@ -666,9 +673,9 @@
       var age = bk.okAt ? ageDays(bk.okAt) : null;
       var due = !c.missing && !out && sub.plan === 'bulanan';
       return { s: s, c: c, name: HUB[s] || s, st: st, x: x, bk: bk, age: age, pu: pu, probs: probs, qs: qs, q: q, qy: qy, pl: (d.places || {})[s] || null,
-        bkLate: !c.missing && !out && (age == null || age > 8 || !!bk.fails), sub: sub, out: out,
+        bkLate: !c.missing && !out && (age == null || age > 8 || !!bk.fails), sub: sub, out: out, plan: c.plan || null,
         ro: !c.missing && !out && (!!sub.readonly || !!(x && x.readonly)),
-        subDue: due && /^(segera|tenggang|lewat)$/.test(sub.state || ''), subBad: due && /^(tenggang|lewat)$/.test(sub.state || '') };
+        subDue: due && /^(segera|tenggang|turun|lewat)$/.test(sub.state || ''), subBad: due && /^(tenggang|turun|lewat)$/.test(sub.state || '') };
     }).sort(function (a, b) { return (!!a.out - !!b.out) || (b.probs.length > 0) - (a.probs.length > 0) || a.name.localeCompare(b.name, 'id'); });
   }
   var FILTERS = [
@@ -815,10 +822,10 @@
   // T-2251 / T-2264: langganan + pembayaran satu coach.
   function subCard(s, v) {
     var tiers = data.tiers || {}, sp = data.setupPrices || { standar: 400000, custom: 2100000 };
-    var bad = /^(tenggang|lewat)$/.test(v.state || '');
+    var bad = /^(tenggang|turun|lewat)$/.test(v.state || '');
     var big = !v.tier || v.tier === 'gratis' ? 'Gratis' : (v.tierName || 'Berbayar');
     var line = !v.tier || v.tier === 'gratis' ? 'Tanpa langganan' : CYCLE[v.cycle] + ' · ' + rp(v.price) +
-      (v.plan === 'bulanan' && v.due ? ' · jatuh tempo ' + day(v.due) + (v.state === 'segera' ? ' (' + (v.days === 0 ? 'hari ini' : v.days + ' hari lagi') + ')' : v.state === 'tenggang' ? ' · tenggang ' + v.graceLeft + ' hari lagi' : v.state === 'lewat' ? ' · lewat masa tenggang' : '') : '') +
+      (v.plan === 'bulanan' && v.due ? ' · jatuh tempo ' + day(v.due) + (v.state === 'segera' ? ' (' + (v.days === 0 ? 'hari ini' : v.days + ' hari lagi') + ')' : v.state === 'tenggang' ? ' · tenggang ' + v.graceLeft + ' hari lagi' : v.state === 'turun' ? ' · telat bayar, batas Starter ' + v.graceLeft + ' hari lagi' : v.state === 'lewat' ? ' · lewat masa tenggang' : '') : '') +
       (v.plan === 'sekali' ? (v.state === 'lunas' ? ' · lunas' : ' · belum lunas') : '');
     var h = '<div class="stat"><span class="v' + (bad ? ' bad' : '') + '">' + esc(big) + '</span><span class="s' + (bad ? ' bad' : '') + '">' + esc(line) + '</span>' +
       (v.plan === 'bulanan' && v.due ? '<div class="w">' + dueTrack(v) + '<div class="scale"><span>jatuh tempo</span><span>' + (v.cycle === 'tahunan' ? '1 tahun' : '30 hari') + '</span></div></div>' : '') + '</div>';
@@ -861,6 +868,47 @@
         '<button class="btn" type="button" data-act="sub-edit" data-slug="' + esc(s) + '">Atur paket</button></div>';
     }
     return h;
+  }
+  // Fase AF: paket & fitur satu coach (isi paket dari Langganan; pengecualian di dialog).
+  var TIERN = { gratis: 'Gratis', starter: 'Starter', pro: 'Pro', studio: 'Studio' };
+  function lim(v) { return v ? String(v) : '∞'; }
+  function planCard(s, p) {
+    if (p.tier === 'gratis') return '<p class="mut">Tanpa batas. Pilih Starter, Pro atau Studio di Langganan untuk membatasi fitur.</p>';
+    var u = p.usage || {}, cl = u.clients || {}, co = u.coaches || {};
+    var maxC = p.limits.clients != null ? p.limits.clients : p.tierLimits.clients, maxK = p.limits.coaches != null ? p.limits.coaches : p.tierLimits.coaches;
+    var h = '<div class="stat"><span class="v">' + esc(TIERN[p.tier] || p.tier) + '</span><span class="s">' +
+      (p.lapse ? '<span class="bad">Telat bayar: memakai batas Starter</span>' : p.frozen ? 'Lifetime: daftar fitur beku' : 'Mengikuti langganan') + '</span></div>';
+    h += '<div style="margin-top:10px">' + kv('Klien aktif', esc((cl.used != null ? cl.used : '–') + ' / ' + lim(maxC))) + kv('Coach', esc((co.used != null ? co.used : '–') + ' / ' + lim(maxK)));
+    var add = p.on.filter(function (f) { return p.base.indexOf(f) === -1; }), off = p.base.filter(function (f) { return p.on.indexOf(f) === -1; });
+    if (add.length) h += kv('Tambahan', esc(add.map(function (f) { return p.labels[f]; }).join(', ')));
+    if (off.length) h += kv('Dimatikan', esc(off.map(function (f) { return p.labels[f]; }).join(', ')));
+    var today = wib(Date.now());
+    if (p.enforceFrom) h += kv('Berlaku penuh', p.enforceFrom > today ? esc(day(p.enforceFrom)) + ' <span class="mut">(masa peringatan)</span>' : esc(day(p.enforceFrom)));
+    h += kv('Logo & warna', p.brand && p.brand.ok ? 'Setup Custom lunas' : '<span class="mut">belum (perlu Setup Custom)</span>');
+    if (p.pushed && p.pushed.error) h += kv('Coach', '<span class="bad">Belum menerima: ' + esc(p.pushed.error) + '</span>');
+    if (p.brand && p.brand.pushed && p.brand.pushed.error) h += kv('Situs', '<span class="bad">' + esc(p.brand.pushed.error) + '</span>');
+    h += '<div class="line mut" style="margin-top:6px">Telat bayar: tenggang 7 hari → Starter 14 hari → baca saja.</div></div>';
+    h += '<div class="acts foot"><button class="btn" type="button" data-act="plan-edit" data-slug="' + esc(s) + '">Ubah</button></div>';
+    return h;
+  }
+  function planDialog(s, p) {
+    var d = $('dlgPlan'), maxC = p.tierLimits.clients, maxK = p.tierLimits.coaches;
+    var feats = p.features.map(function (f) {
+      var on = p.on.indexOf(f) !== -1, changed = on !== (p.base.indexOf(f) !== -1);
+      return '<label class="pchk' + (changed ? ' chg' : '') + '"><input type="checkbox" data-pf="' + esc(f) + '"' + (on ? ' checked' : '') + '> ' + esc(p.labels[f]) + '</label>';
+    }).join('');
+    d.innerHTML = '<form class="plan-form form" data-slug="' + esc(s) + '" novalidate method="dialog">' +
+      '<h3>Paket & fitur · ' + esc(HUB[s] || s) + '</h3>' +
+      '<p>Paket <b>' + esc(TIERN[p.tier] || p.tier) + '</b> (dari Langganan). Centang = menyala; tebal = berbeda dari isi paket.</p>' +
+      '<div class="pgrid">' + feats + '</div>' +
+      '<div class="two"><div><label for="pp-c">Batas klien aktif</label><input id="pp-c" data-f="clients" inputmode="numeric" autocomplete="off" placeholder="paket: ' + esc(lim(maxC)) + '" value="' + esc(p.limits.clients != null ? p.limits.clients : '') + '"></div>' +
+      '<div><label for="pp-k">Batas coach</label><input id="pp-k" data-f="coaches" inputmode="numeric" autocomplete="off" placeholder="paket: ' + esc(lim(maxK)) + '" value="' + esc(p.limits.coaches != null ? p.limits.coaches : '') + '"></div></div>' +
+      '<p class="hint mut">Kosong = ikut paket, 0 = tanpa batas.</p>' +
+      '<label for="pp-e">Mulai ditegakkan</label><div class="two"><input id="pp-e" data-f="enforceFrom" type="date" value="' + esc(p.enforceFrom || '') + '">' +
+      '<button class="btn" type="button" data-act="plan-warn">30 hari lagi</button></div>' +
+      '<p class="hint mut">Sebelum tanggal ini coach hanya melihat peringatan. Kosong = langsung berlaku.</p>' +
+      '<div class="acts"><button class="btn" type="button" data-act="plan-batal">Batal</button><button class="btn primary" type="submit">Simpan</button></div></form>';
+    d.showModal();
   }
   function outBox(s, o) {
     var left = Number(o.daysLeft), f = o.final || {};
@@ -908,6 +956,7 @@
       tileHtml('Sesi selesai 7 hr', x.sessions.done7d, histVals(c.hist, H.done, ax)) + tileHtml('Sesi 7 hr ke depan', x.sessions.next7d, histVals(c.hist, H.next, ax)) + '</div>';
     var cs = [], forms = [], side = '';
     if (!c.missing && !r.out) cs.push(card('Langganan & pembayaran', subCard(s, r.sub), 'subcard'));
+    if (!c.missing && !r.out && r.plan) cs.push(card('Paket & fitur', planCard(s, r.plan), 'plancard'));
     if (r.qs.length) side += '<div class="subsect"><h3>Kuota Google</h3>' + quotaBlocks(r, data.quotaLimits || QLIM) + '</div>';
     if (!c.missing) {
       var bk = r.bk, pu = r.pu;
@@ -1158,11 +1207,17 @@
     }, function (e) { toast(e.message, 'bad'); });
   }
   document.addEventListener('submit', function (ev) {
-    var f = ev.target.closest && ev.target.closest('.pl-form, .rn-form, .sub-form, .pay-form, .lv-form');
+    var f = ev.target.closest && ev.target.closest('.pl-form, .rn-form, .sub-form, .pay-form, .lv-form, .plan-form');
     if (!f) return;
     ev.preventDefault();
     var slug = f.getAttribute('data-slug') || f.getAttribute('data-sub');
     var val = function (k) { var el = f.querySelector('[data-f="' + k + '"]'); return el ? el.value : ''; };
+    if (f.classList.contains('plan-form')) {
+      var on = [].slice.call(f.querySelectorAll('[data-pf]')).filter(function (x) { return x.checked; }).map(function (x) { return x.getAttribute('data-pf'); });
+      toast('Menyimpan paket ' + slug + '…');
+      return rpc('pusatPlanSave', [tok(), slug, { on: on, clients: val('clients'), coaches: val('coaches'), enforceFrom: val('enforceFrom') }])
+        .then(function (d) { data = d; $('dlgPlan').close(); render(); toast('Paket & fitur ' + slug + ' disimpan.', 'ok'); }, function (e) { toast(e.message, 'bad'); });
+    }
     if (f.classList.contains('sub-form')) {
       toast('Menyimpan paket ' + slug + '…');
       return rpc('pusatSubSave', [tok(), slug, { tier: val('tier'), cycle: val('cycle'), price: val('price'), due: val('due'), email: val('email'), setupKind: val('setupKind'), setupPrice: val('setupPrice') }])
@@ -1257,6 +1312,9 @@
       return;
     }
     if (a === 'tempat-hapus') return ask('Hapus tempat latihan?', 'Tempat latihan ' + slug + ' dihapus dari xnk.web.id.', 'Hapus', true).then(function (y) { if (y) savePlace(slug, '', ''); });
+    if (a === 'plan-edit') { var rr = model().filter(function (x) { return x.s === slug; })[0]; if (rr && rr.plan) planDialog(slug, rr.plan); return; }
+    if (a === 'plan-batal') { $('dlgPlan').close(); return; }
+    if (a === 'plan-warn') { var pe = $('pp-e'); if (pe) pe.value = wib(Date.now() + 30 * DAY); return; }
     if (a === 'sub-edit' || a === 'sub-batal') { openSub = a === 'sub-edit' ? slug : ''; openPay = ''; render(); var sp = openSub && $('sb-' + openSub + '-t'); if (sp) { sp.focus(); sp.scrollIntoView({ block: 'nearest' }); } return; }
     if (a === 'pay-open' || a === 'pay-batal') { openPay = a === 'pay-open' ? slug : ''; openSub = ''; render(); var pk = openPay && $('py-' + openPay + '-a'); if (pk) { pk.focus(); pk.scrollIntoView({ block: 'nearest' }); } return; }
     if (a === 'leave' || a === 'leave-batal') {

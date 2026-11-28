@@ -157,6 +157,25 @@ function _planReminderOk_(type) {
   return _planOn_(p).indexOf('telegramFull') !== -1;
 }
 
+// Bagian getPortalMore / getClientBundle milik fitur berbayar: null saat fiturnya mati.
+var PLAN_PARTS = { nutrition: 'nutrition', foodLog: 'nutrition', bills: 'finance', content: 'content', programGen: 'programAuto',
+  share: 'share', assessment: 'care', healthForm: 'care', care: 'care', notes: 'care' };
+
+function _planPartOff_(name) {
+  var f = PLAN_PARTS[name];
+  if (!f) return false;
+  var p = _plan_();
+  return !!p && _planEnforced_(p) && _planOn_(p).indexOf(f) === -1;
+}
+
+/** Web Push termasuk Starter; hanya jenis milik fitur yang mati yang dilewati (makan → Gizi). */
+function _planPushOk_(kind) {
+  var p = _plan_();
+  if (!p || !_planEnforced_(p)) return true;
+  if (String(kind).indexOf('makan-') === 0) return _planOn_(p).indexOf('nutrition') !== -1;
+  return true;
+}
+
 /** Untuk bootstrap panel dan portal: null = tanpa batas. */
 function _planInfo_(withUsage) {
   var p = _plan_();

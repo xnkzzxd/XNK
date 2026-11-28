@@ -2280,12 +2280,12 @@ function getPortalBootstrapImpl_(memberToken) {
     profile: found ? _memberPublicProfile_(found.row) : null,
     authLost: authLost.indexOf(AUTH_ERROR_PREFIX) !== -1 ? authLost : '',
     schedules: mine,
-    feedbackEnabled: feedbackOn,
-    shareEnabled: _shareEnabled_(),
+    feedbackEnabled: feedbackOn && !_planPartOff_('care'),   // Fase AF: fitur di luar paket coach
+    shareEnabled: _shareEnabled_() && !_planPartOff_('share'),
     pushKey: _pushPublicKey_(),   // Fase X: kosong = notifikasi mati (kartu tersembunyi)
     pendingRating: found && feedbackOn ? _tp_(tr, 'pendingRating', function() { return _pendingRating_(memberId, all); }) : null,
     packageEval: { eligible: !!(found && feedbackOn && _tp_(tr, 'packageEval', function() { return _packageEvalEligible_(found.row, all); })) },
-    info: { latestAt: found ? _tp_(tr, 'content', _contentLatestAt_) : '' },
+    info: { latestAt: found && !_planPartOff_('content') ? _tp_(tr, 'content', _contentLatestAt_) : '' },
     openSlots: _tp_(tr, 'openSlots', function() { return _openSlotsCached_({ days: horizon }, now, all, false, ver); }),
     openSlotsByCoach: _tp_(tr, 'slotsByCoach', function() { return _openSlotsByCoach_(all, ver, horizon, now, false); }),
     horizonDays: horizon,
@@ -2351,7 +2351,7 @@ function getPortalMoreImpl_(row, tr) {
       return hit;
     }
   }
-  const part = function(name, fn) { try { return _tp_(tr, name, fn); } catch (e) { return { error: String((e && e.message) || e) }; } };
+  const part = function(name, fn) { if (_planPartOff_(name)) return name === 'nutrition' ? { enabled: false } : null; try { return _tp_(tr, name, fn); } catch (e) { return { error: String((e && e.message) || e) }; } };
   const result = _plainJson_(_withSchedulesMemo_(function() {
     const coachId = String(row[10] || '').trim();
     const spy = {};
@@ -2575,7 +2575,7 @@ function getAdminMore(token, month, year, fresh) {
   const ymd = _wibParts_(new Date()).date.split('-').map(Number);
   const m = Number(month) >= 1 && Number(month) <= 12 ? Number(month) : ymd[1];
   const y = Number(year) >= 2000 && Number(year) <= 2100 ? Number(year) : ymd[0];
-  const part = function (name, fn) { try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
+  const part = function (name, fn) { if (_planPartOff_(name)) return name === 'nutrition' ? { enabled: false } : null; try { return _tp_(tr, name, fn); } catch (err) { return { error: String(err && err.message || err) }; } };
   // Fase W: hasil jadi disimpan sebentar (TTL ADMIN_MORE_CACHE_SECONDS, bawaan 90, 15–600). Kunci memuat hari WIB, bulan, tahun,
   // versi admin (naik di setiap _bumpMember_ / _bustSlots_ / _bustShared_) dan versi bersama. fresh=true (tarik-untuk-segarkan) melewati
   // pembacaan cache tetapi tetap menyimpan hasil baru. memberVers selalu segar.

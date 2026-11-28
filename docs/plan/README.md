@@ -1,4 +1,4 @@
-# Phase AF — coach plans (Starter / Pro / Studio)
+# Phase AF — coach plans (built 2026-11-28) (Starter / Pro / Studio)
 
 The owner sells three tiers (prices: `PUSAT_TIERS` in `xnk-pusat/src/Pusat.gs`; promises: `xnk-library/tools/hub-harga.js`).
 This phase makes each coach's server enforce the tier the owner picks in XNK HQ. Tasks T-2600+.
@@ -30,10 +30,10 @@ This phase makes each coach's server enforce the tier the owner picks in XNK HQ.
 ## TODO
 
 - [x] T-2600 Server core: `Plan.gs`, gate, client / coach limits, reminder filter, bootstrap + hubStatus fields, `hubPlan`, tests.
-- [ ] T-2601 XNK HQ: "Paket & fitur" in the inspector (tier from `SUB_`, switches, numbers, `enforceFrom`), `pusatSetPlan` → `hubPlan`; daily resend in `checkAll_`; lapse step (14 days Starter, then read-only); lifetime snapshot; usage from `hubStatus().plan`.
-- [ ] T-2602 Coach panel: meter card in Pengaturan → Akun, greyed locked entries ("Tersedia di Pro"), upgrade `wa.me`, a toast for `code: 'plan*'` answers, 30-day warning band.
-- [ ] T-2603 Portal: hide parts / tabs of off features (`getPortalBootstrap.plan.on`), skip off parts in `getPortalMore`, "Coach sedang penuh" screen with WhatsApp in `#sheet-reg`.
-- [ ] T-2604 Push planner: skip kinds of off features.
-- [ ] T-2605 Downgrade freezes auto programs (clear `Sumber`, stop review) when `programAuto` turns off.
-- [ ] T-2606 Brand gate: `build-hub.js` uses `accent` / `logo` and drops "Didukung XNK" only with a paid Setup Custom (HQ writes the flag to `hub.json`).
-- [ ] T-2607 Docs: Agent.md §7, apps-script/README.md (owner, Indonesian), xnk-library docs.
+- [x] T-2601 XNK HQ (`xnk-pusat/src/Pusat.gs`): `PLAN_<slug>`, `planWant_` / `planSync_` / `planView_`, owner `pusatPlanSave` (on-list → add/off, limits, `enforceFrom` or `'warn'` = +30 days), resent on subscription save and in the daily check; `subStatus_` state `turun` (after the 7-day grace: Starter for `PUSAT_SUB_STARTER_DAYS` = 14, then `lewat` = read-only); lifetime / beli putus freeze `features` at the first save. `/adminxnk`: card "Paket & fitur" in the inspector + `<dialog id="dlgPlan">`. The upgrade WhatsApp number is HQ Script Property `PUSAT_WA`. `PUSAT_PLAN_TIER` is tested equal to `PLAN_TIERS`.
+- [x] T-2602 Coach panel (`parts/app/26-paket-coach.part`, theme `15-paket-coach.part`, both now close the file): `window.adminPlan` (`xnk_admin_plan`, cleared by `clearAdminCache`), `planLocked(f)`, card "Paket Anda" in Pengaturan → Akun (meters, warning period text, upgrade `wa.me`), Konten / Keuangan sidebar rows greyed with a Pro/Studio pill → `#sheet-plan` (prefix `pl-`), Gizi client tab hidden when locked, `waitErr` opens the sheet on `code: 'plan'`. Owner choice: no band, the warning lives only in the card.
+- [x] T-2603 Portal: `getPortalMore` / `getClientBundle` parts of off features are `null` (`nutrition` = `{enabled:false}`, so the Makan tab hides itself; `PLAN_PARTS`), bootstrap `shareEnabled` / `feedbackEnabled` / `info.latestAt` follow the plan; both sign-up forms show "Coach sedang penuh" with a WhatsApp button.
+- [x] T-2604 Push: `_rmdIsOff_(client, kind, push)` uses `_planPushOk_` (Web Push is in Starter; only `makan-*` needs Gizi), WhatsApp digests use `_planReminderOk_`.
+- [x] T-2605 `_pgEnabled_` is false while `programAuto` is off: programs stay as they are, no review or regeneration, coach edits still work; upgrade resumes.
+- [x] T-2606 Brand: hub.json `customBrand` (true / false; absent = old coach, unchanged). HQ `brandSync_` dispatches Hub XNK `merek: ya|tidak` when a Setup Custom is paid (`BRAND_<slug>`); `build-hub.js` drops accent and logo when false and, when true, sets `data-own-brand` (hides `.xnk-by`; share cards skip "Didukung XNK"). The hub repo's `hub.yml` gained input `merek` (copy `hub-repo/.github/workflows/hub.yml` to the hub repo).
+- [x] T-2607 Docs.

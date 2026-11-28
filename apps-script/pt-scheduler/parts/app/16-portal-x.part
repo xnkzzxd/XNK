@@ -735,7 +735,17 @@
       window.setPublicMember(res.member);
       window.loadPublicData();
       regx.step = 3; regDraw();
-    }).catch(function (e) { done(); err('Gagal mendaftar: ' + window.authMessage(e)); });
+    }).catch(function (e) {
+      done();
+      // Fase AF: coach sudah penuh menurut paketnya. Tanpa akun; ajak menghubungi coach lewat WhatsApp.
+      if (/Coach sedang penuh/.test(String(e && e.message || ''))) {
+        const wa = window.waUrl(window.coachPhoneById(data.coachId), 'Halo Coach, saya ' + data.name + ' ingin mendaftar PT (paket ' + p.namaPaket + '). Apakah masih ada tempat?');
+        setHTML('reg-x-err', '<span>Coach sedang penuh, jadi pendaftaran belum bisa dibuat. Tanyakan tempat kosong langsung ke coach.</span>' +
+          (wa ? ' <a class="btn btn-primary btn-block" style="margin-top:10px" href="' + h(wa) + '" target="_blank" rel="noopener">' + icon('message-circle') + ' Hubungi coach via WhatsApp</a>' : ''));
+        return;
+      }
+      err('Gagal mendaftar: ' + window.authMessage(e));
+    });
   };
   // Langkah 3–5 membuka layar yang sudah ada; begitu layar itu ditutup, lembar daftar kembali di langkah berikutnya.
   window.regDo = function (what) {

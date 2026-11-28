@@ -6,7 +6,8 @@
 
 const PG_JOB_MAX = 40;   // klien per jalan job (batas waktu Apps Script)
 
-function _pgEnabled_() { return PropertiesService.getScriptProperties().getProperty('PROGRAM_AUTO_ENABLED') !== 'false'; }
+// Fase AF: paket tanpa programAuto = program yang ada membeku (tidak ditinjau, tidak dibuat ulang); coach tetap bisa mengubahnya.
+function _pgEnabled_() { return PropertiesService.getScriptProperties().getProperty('PROGRAM_AUTO_ENABLED') !== 'false' && !_planPartOff_('programGen'); }
 
 /** Jawaban form kesehatan terbaru (server saja) → bentuk _pgenSafety_, atau null bila belum diisi. */
 function _pgHealthFor_(id) {

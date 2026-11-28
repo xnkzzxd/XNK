@@ -485,7 +485,7 @@
       return true;
     } catch (e) { return false; }
   }
-  function clearAdminCache() { _lsSet('xnk_admin_me', null); window.adminMe = null; window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearFinCache) window.clearFinCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
+  function clearAdminCache() { _lsSet('xnk_admin_me', null); window.adminMe = null; _lsSet('xnk_admin_plan', null); window.adminPlan = null; window.offlineClear(); window.aqForget(); window.clientInsight = {}; _lsSet(ADMIN_CACHE_KEY, null); _lsSet('xnk_settings_cache', null); if (window.clearClientCache) window.clearClientCache(); if (window.clearFinCache) window.clearFinCache(); if (window.clearCareCache) window.clearCareCache(); if (window.clearNutCache) window.clearNutCache(); if (window.wlForget) window.wlForget('admin'); if (window.obForget) window.obForget('admin'); }
 
   // Bagian utama dimuat dulu; riwayat transaksi, PR, perpanjangan, pengaturan
   // dan omzet menyusul setelah layar tampil.
@@ -563,6 +563,7 @@
       if (r[4]) Object.assign(DAY_HOURS, r[4]);
       if (b) window.setReadonly(b.readonly, 'admin');   // T-2251
       if (b && b.me) window.setAdminMe(b.me);           // Fase AE
+      if (b && 'plan' in b && window.setAdminPlan) window.setAdminPlan(b.plan);   // Fase AF
       if (b && Array.isArray(b.holds) && !window.wqStale(snap)) window.holds = b.holds;   // Fase AD1
       ui.dataReady = true;
       window.hideGlobalLoader();

@@ -796,6 +796,17 @@
       </form>
     </div>
 
+    <!-- Fase AF: fitur di luar paket coach -->
+    <div class="sheet sm hide" id="sheet-plan" role="dialog" aria-modal="true" aria-labelledby="pl-title">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><h2 class="sheet-title" id="pl-title">Tersedia di Pro</h2><button type="button" class="icon-btn plain" onclick="window.closeModal()" aria-label="Tutup"><i data-lucide="x"></i></button></div>
+      <div class="sheet-body stack" style="gap:12px">
+        <p class="li-sub" id="pl-sub"></p>
+        <a class="btn btn-primary btn-block hide" id="pl-wa" href="#" target="_blank" rel="noopener"><i data-lucide="message-circle"></i> Tanya via WhatsApp</a>
+        <button type="button" class="btn btn-ghost btn-block" onclick="window.closeModal()">Tutup</button>
+      </div>
+    </div>
+
     <!-- Fase AE: pilih / pindah coach klien (hanya pemilik) -->
     <div class="sheet sm hide" id="sheet-mcoach" role="dialog" aria-modal="true" aria-labelledby="mc-title">
       <div class="sheet-handle"></div>

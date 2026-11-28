@@ -84,6 +84,13 @@ function fakeMoney() {
     setupUnpaid: !PUSAT_OUT && v.setup.kind !== 'none' && !v.setup.paidAt ? ['claudia'] : [],
     payments: v.pay.slice().reverse().map(p => Object.assign({ slug: 'claudia' }, p)) };
 }
+// Fase AF: paket & fitur (bentuk = planView_ di Pusat.gs).
+const PF = ['finance', 'nutrition', 'care', 'photos', 'report', 'share', 'content', 'programAuto', 'telegramFull', 'templates', 'classes', 'coachShare', 'multiCoach'];
+const PRO = PF.slice(0, 10);
+const PUSAT_PLAN = { tier: 'pro', lapse: false, frozen: false, base: PRO, on: PRO.filter(f => f !== 'report').concat(['classes']), add: ['classes'], off: ['report'],
+  limits: { clients: null, coaches: null }, tierLimits: { clients: 0, coaches: 1 }, enforceFrom: '2026-12-28', usage: { clients: { used: 12, max: 0 }, coaches: { used: 1, max: 1 } },
+  pushed: { at: new Date().toISOString(), error: '' }, brand: { ok: false, pushed: null }, features: PF,
+  labels: { finance: 'Keuangan', nutrition: 'Gizi', care: 'Asesmen & catatan sesi', photos: 'Foto progres', report: 'Laporan PDF', share: 'Kartu bagikan', content: 'Info & tips', programAuto: 'Program otomatis', telegramFull: 'Semua pengingat WA', templates: 'Template program', classes: 'Kelas grup', coachShare: 'Bagi hasil coach', multiCoach: 'Banyak coach' } };
 function fakePusat(req) {
   PUSAT_CALLS.push(req.fn);
   if (req.fn === 'pusatLogin') return req.args[0] === 'pin-pusat-1' ? { ok: true, data: { token: 'T1', exp: Date.now() + 3600e3 } } : { ok: false, error: 'PIN salah.' };
@@ -98,7 +105,8 @@ function fakePusat(req) {
     return { ok: true, data: { slug: req.args[1], day: PUSAT_OUT.day, deleteOn: PUSAT_OUT.deleteOn, dirUrl: PUSAT_OUT.final.dirUrl, readonly: 'ok', push: 'ok', backup: 'ok', hub: 'ok' } };
   }
   // T-2251: langganan (bawaan gratis); simpan dan aksi menjawab overview baru.
-  if (req.fn === 'pusatSubSave') {
+  if (req.fn === 'pusatPlanSave') { PUSAT_CALLS.plan = req.args.slice(1); const d = req.args[2]; PUSAT_PLAN.on = d.on; PUSAT_PLAN.limits.clients = d.clients === '' ? null : Number(d.clients); PUSAT_PLAN.enforceFrom = d.enforceFrom; }
+  else if (req.fn === 'pusatSubSave') {
     PUSAT_CALLS.sub = req.args.slice(1);
     const d = req.args[2], t = PUSAT_TIERS[d.tier], price = Number(String(d.price).replace(/\D/g, '')) || (t ? t[d.cycle] : 0);
     const plan = d.tier === 'gratis' ? 'gratis' : (d.cycle === 'bulanan' || d.cycle === 'tahunan') ? 'bulanan' : 'sekali';
@@ -119,7 +127,7 @@ function fakePusat(req) {
   return { ok: true, data: { hub: 'https://xnk.web.id', latest: { version: 11, commit: 'c'.repeat(40) }, canAct: true, fetchToday: 34, money: fakeMoney(), tiers: PUSAT_TIERS, setupPrices: require('./hub-harga').pusatShape().setup, quotaLimits: { mail: 100, fetch: 20000, triggerMin: 90 }, setup: { ok: false, auth: false, daily: true, backup: true, editor: 'https://script.google.com/d/SCRIPTPUSAT/edit' },
     places: { claudia: { name: 'Gold Gym Kemang', city: 'Jakarta Selatan' }, 'claudia-2': null }, coaches: [
     { slug: 'claudia', exec: EXEC_A, hist: HIST_A, registeredAt: new Date().toISOString(), panel: 'https://xnk.web.id/claudia/', klien: 'https://xnk.web.id/claudia/klien/', status: st(true, []),
-      backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, push: PUSAT_OUT ? { on: false, active: false, subs: 0, at: '', error: '' } : { on: true, active: true, subs: 3, at: new Date().toISOString(), error: '' }, sub: Object.assign({}, PUSAT_SUB), out: PUSAT_OUT },
+      backup: { at: '2026-11-15T03:00:00.000Z', okAt: '2026-11-15T03:00:00.000Z', fileUrl: 'https://docs.google.com/spreadsheets/d/BACKUPHUBCHECK/edit', rows: 321, error: '', fails: 0, queued: !!PUSAT_CALLS.backup, running: false }, push: PUSAT_OUT ? { on: false, active: false, subs: 0, at: '', error: '' } : { on: true, active: true, subs: 3, at: new Date().toISOString(), error: '' }, sub: Object.assign({}, PUSAT_SUB), plan: PUSAT_OUT ? null : JSON.parse(JSON.stringify(PUSAT_PLAN)), out: PUSAT_OUT },
   ] } };
 }
 
@@ -435,6 +443,20 @@ async function makeLogos(browser) {
       await page.click('#menu [data-act="sub-ro-on"]');
       await clearDm(); await dlgOk(); await waitDm('Selesai');
       check(PUSAT_CALLS.subAct === 'sub-ro-on' && (await txt('#insp')).includes('dinyalakan tangan') && (await txt('#list .ccard[data-sel="claudia"]')).includes('Baca saja'), 'Baca saja nyala lewat menu + dialog (bukan confirm)');
+      // Fase AF: kartu Paket & fitur + dialog Ubah
+      check((await txt('#insp .plancard')).includes('Pro') && (await txt('#insp .plancard')).includes('12 / ∞') && (await txt('#insp .plancard')).includes('Kelas grup') && (await txt('#insp .plancard')).includes('Laporan PDF'), 'Paket & fitur: paket, pemakaian, tambahan, dimatikan');
+      await shot('af-hq-kartu');
+      await page.click('#insp [data-act="plan-edit"]');
+      await page.waitForSelector('#dlgPlan[open]', { timeout: 5000 }).catch(() => {});
+      check(await page.isVisible('#dlgPlan .plan-form'), 'Paket & fitur: dialog terbuka (bukan window.confirm)');
+      check(await page.evaluate(() => document.querySelector('#dlgPlan [data-pf="classes"]').closest('label').classList.contains('chg')), 'dialog: fitur yang berbeda dari paket ditebalkan');
+      await shot('af-hq-dialog');
+      await page.check('#dlgPlan [data-pf="report"]');
+      await page.fill('#pp-c', '30');
+      await page.click('#dlgPlan [data-act="plan-warn"]');
+      await clearDm(); await page.click('#dlgPlan button[type="submit"]'); await waitDm('disimpan');
+      check(PUSAT_CALLS.plan && PUSAT_CALLS.plan[0] === 'claudia' && PUSAT_CALLS.plan[1].on.includes('report') && PUSAT_CALLS.plan[1].clients === '30' && /^\d{4}-\d{2}-\d{2}$/.test(PUSAT_CALLS.plan[1].enforceFrom), 'dialog: simpan memanggil pusatPlanSave');
+      check(!(await page.isVisible('#dlgPlan[open]')) && (await txt('#insp .plancard')).includes('12 / 30'), 'dialog: tertutup, kartu diperbarui');
       // T-2258: tempat
       check((await txt('#insp')).includes('Tempat: Gold Gym Kemang · Jakarta Selatan'), 'detail: tempat dari hub.json');
       await page.click('#insp [data-act="tempat"]');

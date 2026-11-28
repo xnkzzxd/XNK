@@ -29,7 +29,7 @@ Rules for agents: [Agent.md](Agent.md). Phase letters and task ranges are unique
 | AC | Klien list + client profile redesign in the coach panel (portal patterns, one home per action, lean calls) | [clientpage/](clientpage/) | T-2300+ | built (Waves 1–4 approved by the owner, PR #201) |
 | AD | Coach kit: client hold (Cuti / Sakit / Berhenti), measurement guide + Pinggul, coach logger upgrade, PDF report on demand | [coachkit/](coachkit/) | T-2400+ | built (2026-11-26; T-2409b dropped) |
 | AE | Login per coach: own PIN, own clients, own sessions, own finance; portal picks a coach first | [akses/](akses/) | T-2500+ | built, waves 1–2 (2026-11-27) |
-| AF | Coach plans Starter / Pro / Studio: features and limits set in XNK HQ, enforced per coach | [plan/](plan/) | T-2600+ | in progress (T-2600 built) |
+| AF | Coach plans Starter / Pro / Studio: features and limits set in XNK HQ, enforced per coach | [plan/](plan/) | T-2600+ | built (2026-11-28) |
 | — | Reminder texts: tone rules and sources of the science tips | [reminder/Sumber.md](reminder/Sumber.md) | — | built (2026-11) |
 
 Notes

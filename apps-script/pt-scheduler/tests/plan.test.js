@@ -128,3 +128,36 @@ test('paket: hubPlan gratis menghapus batas; isian dibersihkan', () => {
   assert.equal(env.props.XNK_PLAN, undefined);
   assert.equal(env.call('hubStatus', SECRET).plan, null);
 });
+
+test('paket: portal — bagian fitur yang mati kosong, Gizi {enabled:false}, bendera share/rating mati', () => {
+  const env = hubEnv(), { KEY_A } = require('./fixtures');
+  env.call('hubPlan', SECRET, { tier: 'starter' });
+  const tok = env.memberToken(KEY_A);
+  const more = env.call('getPortalMore', tok);
+  assert.deepEqual(more.nutrition, { enabled: false });
+  assert.equal(more.bills, null);
+  assert.equal(more.programGen, null);
+  assert.equal(more.share, null);
+  assert.notEqual(more.progress, null, 'core parts stay');
+  const b = env.call('getPortalBootstrap', tok);
+  assert.equal(b.shareEnabled, false);
+  assert.equal(b.feedbackEnabled, false);
+  assert.deepEqual(b.plan.tier, 'starter');
+  env.call('hubPlan', SECRET, { tier: 'pro' });
+  const b2 = env.call('getPortalBootstrap', tok);
+  assert.equal(b2.shareEnabled, true);
+  assert.notDeepEqual(env.call('getPortalMore', tok).nutrition, { enabled: false });
+});
+
+test('paket: push — Starter tetap dapat push sesi dan PR, push makan hanya dengan Gizi; program otomatis membeku', () => {
+  const env = hubEnv();
+  env.call('hubPlan', SECRET, { tier: 'starter' });
+  assert.equal(env.call('_rmdIsOff_', {}, 'pr', true), false);
+  assert.equal(env.call('_rmdIsOff_', {}, 'sesi-besok', true), false);
+  assert.equal(env.call('_rmdIsOff_', {}, 'makan-pagi', true), true);
+  assert.equal(env.call('_rmdIsOff_', {}, 'pr'), true, 'the PR WhatsApp digest is Pro+');
+  assert.equal(env.call('_pgEnabled_'), false, 'no auto review on Starter');
+  env.call('hubPlan', SECRET, { tier: 'pro' });
+  assert.equal(env.call('_rmdIsOff_', {}, 'makan-pagi', true), false);
+  assert.equal(env.call('_pgEnabled_'), true);
+});

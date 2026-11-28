@@ -39,7 +39,7 @@ function edit(cfg, aksi, a, opts) {
     const keep = i >= 0 && coaches[i].exec === exec ? coaches[i] : {};
     const row = Object.assign({}, keep, { slug, brand, exec }, extra);
     // T-2242: warna (kosong/"tetap" = tetap, "hitam" = tanpa warna) dan logo (kosong = tetap, "-" = hapus).
-    if (i >= 0 && keep !== coaches[i]) for (const k of ['accent', 'logo', 'place']) if (coaches[i][k]) row[k] = coaches[i][k];
+    if (i >= 0 && keep !== coaches[i]) for (const k of ['accent', 'logo', 'place', 'customBrand']) if (coaches[i][k] != null) row[k] = coaches[i][k];
     // T-2243: alamat lama, awalan penyimpanan dan secret clasp milik coach, bukan milik deployment: selalu ikut.
     if (i >= 0) for (const k of IDENTITY) if (coaches[i][k] != null) row[k] = coaches[i][k];
     const w = String(a.accent || '').trim().toLowerCase();
@@ -55,6 +55,10 @@ function edit(cfg, aksi, a, opts) {
       if (r.error) throw new Error(r.error);
       if (r.place) row.place = r.place; else delete row.place;
     }
+    // Fase AF: Setup Custom lunas (ya) = logo, warna dan tanpa "Didukung XNK"; tidak = semua itu dimatikan; kosong/tetap = tetap.
+    const mk = String(a.merek || '').trim().toLowerCase();
+    if (mk === 'ya') row.customBrand = true; else if (mk === 'tidak') row.customBrand = false;
+    else if (mk && mk !== 'tetap') throw new Error('merek harus ya, tidak, atau tetap.');
     if (i >= 0) { coaches[i] = row; message = `Coach "${slug}" diperbarui.`; }
     else { coaches.push(row); message = `Coach "${slug}" ditambahkan.`; }
   } else if (aksi === 'hapus') {
@@ -104,13 +108,13 @@ module.exports = { edit, coachSecret };
 if (require.main === module) {
   const args = process.argv.slice(2);
   const flag = k => { const i = args.indexOf(k); return i >= 0 ? args.splice(i, 2)[1] : ''; };
-  const accent = flag('--warna'), logo = flag('--logo'), placeName = flag('--tempat'), placeCity = flag('--kota');
+  const accent = flag('--warna'), logo = flag('--logo'), placeName = flag('--tempat'), placeCity = flag('--kota'), merek = flag('--merek');
   const [file, aksi, slug, brand, exec, scriptId, deploymentId] = args;
   if (!file || !aksi) { console.error('pakai: hub-edit.js <hub.json> simpan|hapus|nonaktif|aktifkan <slug> [nama usaha] [link /exec] | ganti-slug <lama> <baru>'); process.exit(1); }
   try {
     const cur = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { coaches: [] };
     // ganti-slug: argumen ke-2 setelah slug = slug baru (posisi "nama usaha" pada simpan).
-    const r = edit(cur, aksi, { slug, brand, exec, scriptId, deploymentId, accent, logo, placeName, placeCity, newSlug: aksi === 'ganti-slug' ? brand : '' }, { baseDir: require('path').dirname(require('path').resolve(file)) });
+    const r = edit(cur, aksi, { slug, brand, exec, scriptId, deploymentId, accent, logo, placeName, placeCity, merek, newSlug: aksi === 'ganti-slug' ? brand : '' }, { baseDir: require('path').dirname(require('path').resolve(file)) });
     fs.writeFileSync(file, JSON.stringify(r.cfg, null, 2) + '\n');
     console.log(r.message);
   } catch (e) {

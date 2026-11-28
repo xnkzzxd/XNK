@@ -50,7 +50,7 @@ function hubUrl_() { return prop_('HUB_URL', 'https://xnk.web.id').replace(/\/+$
 
 // ── Pintu JSON untuk /adminxnk dan wizard coach ──────────────────────────────────────────────────────────────
 
-var PUSAT_API = { pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSubSave: pusatSubSave, pusatSubPay: pusatSubPay, pusatSetPlace: pusatSetPlace, pusatLeave: pusatLeave };
+var PUSAT_API = { pusatPlanSave: pusatPlanSave, pusatLogin: pusatLogin, pusatOverview: pusatOverview, pusatCheck: pusatCheck, pusatAction: pusatAction, pusatRegister: pusatRegister, pusatPushTargets: pusatPushTargets, pusatRename: pusatRename, pusatSubSave: pusatSubSave, pusatSubPay: pusatSubPay, pusatSetPlace: pusatSetPlace, pusatLeave: pusatLeave };
 
 function doPost(e) {
   var out;
@@ -412,7 +412,7 @@ function pusatOverview(token) {
     // T-2258: tempat latihan tiap coach di hub.json (juga yang belum terdaftar di sini), slug → {name, city} | null.
     places: hubCoaches.reduce(function (m, x) { if (x && PUSAT_SLUG_RE.test(String(x.slug))) m[x.slug] = hubPlace_(x.slug, hubCoaches); return m; }, {}),
     coaches: Object.keys(all).sort().map(function (slug) {
-      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), hist: json_('HIST_' + slug, []), backup: backupView_(slug), push: pushView_(slug), sub: subView_(slug), out: outView_(slug, hubCoaches) };
+      return { slug: slug, exec: all[slug].exec, registeredAt: all[slug].at, panel: hub + '/' + slug + '/', klien: hub + '/' + slug + '/klien/', status: json_('ST_' + slug, null), hist: json_('HIST_' + slug, []), backup: backupView_(slug), push: pushView_(slug), sub: subView_(slug), plan: planView_(slug, subState_(slug)), out: outView_(slug, hubCoaches) };
     }),
     setup: setupState_(),
     money: moneyView_(),   // T-2264
@@ -928,6 +928,7 @@ function pusatRename(token, oldSlug, newSlug) {
 // Keadaan dikirim ke coach lewat hubReadonly(HUB_SECRET, menyala, catatan) saat berubah dan di cek harian.
 
 var PUSAT_SUB_GRACE_DAYS = 7;
+var PUSAT_SUB_STARTER_DAYS = 14;      // Fase AF: sesudah tenggang, 14 hari batas Starter, baru baca saja
 var PUSAT_SUB_REMIND = [7, 1];          // email pengingat H-7 dan H-1
 var PUSAT_SUB_HISTORY = 24;             // (lama) riwayat bayar langganan
 var PUSAT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -1020,6 +1021,7 @@ function subStatus_(s, today) {
     if (days > PUSAT_SUB_REMIND[0]) out.state = 'aktif';
     else if (days >= 0) out.state = 'segera';
     else if (-days <= PUSAT_SUB_GRACE_DAYS) { out.state = 'tenggang'; out.graceLeft = PUSAT_SUB_GRACE_DAYS + days; }
+    else if (-days <= PUSAT_SUB_GRACE_DAYS + PUSAT_SUB_STARTER_DAYS) { out.state = 'turun'; out.graceLeft = PUSAT_SUB_GRACE_DAYS + PUSAT_SUB_STARTER_DAYS + days; }
     else { out.state = 'lewat'; out.readonly = true; }
   } else if (s.plan === 'bulanan') out.state = 'aktif';
   else if (s.plan === 'sekali') out.state = (s.pay || []).some(function (p) { return p.kind === s.cycle; }) ? 'lunas' : 'belum';   // lifetime / beli putus
@@ -1117,6 +1119,9 @@ function subDaily_() {
     try { subRemind_(slug); } catch (e) { probs.push('Email pengingat langganan gagal (' + String(e && e.message ? e.message : e).slice(0, 100) + ').'); }
     var r = subSync_(slug, all[slug], true);
     if (r && r.error) probs.push('Mode baca saja belum diterima coach: ' + r.error);
+    var pr = planSync_(slug, all[slug], true);
+    if (pr && pr.error) probs.push('Paket belum diterima coach: ' + pr.error);
+    if (!o && st0_(slug) === 'turun') probs.push('Langganan lewat tenggang; coach memakai batas Starter.');
     var st = subStatus_(subState_(slug), todayWib_());
     if (!o && st.state === 'tenggang') probs.push('Langganan lewat jatuh tempo; masa tenggang ' + st.graceLeft + ' hari lagi.');
     if (probs.length) out[slug] = probs;
@@ -1169,6 +1174,8 @@ function pusatSubSave(token, slug, data) {
   s.tier = tier; s.cycle = cycle; s.plan = plan; s.price = price; s.due = plan === 'bulanan' ? due : ''; s.email = email;
   subSave_(slug, s);
   subSync_(slug, all[slug], false);
+  planSync_(slug, all[slug], false);
+  brandSync_(slug);
   return pusatOverview(token);
 }
 
@@ -1210,6 +1217,7 @@ function subPay_(slug, data) {
   } else if (kind === 'setup') s.setup.paidAt = date;
   s.pay.push(entry);
   subSave_(slug, s);
+  brandSync_(slug);   // Fase AF: Setup Custom lunas = logo, warna, tanpa "Didukung XNK"
   var r = subSync_(slug, all[slug], false);
   return r && r.error ? 'Pembayaran dicatat, tetapi coach belum menerima keadaan baca saja: ' + r.error + ' (dicoba lagi besok pagi).' : '';
 }
@@ -1527,4 +1535,151 @@ function outDaily_() {
     if (probs.length) out[slug] = probs;
   });
   return out;
+}
+
+
+// ── Paket & fitur (Fase AF, docs/plan/) ─────────────────────────────────────────────────────────────────────────────
+// Per coach PLAN_<slug> = {add, off, limits, enforceFrom, features (salinan beku lifetime), pushed}. Paket dasar diambil dari
+// langganan (SUB_). Yang dikirim ke coach lewat hubPlan(HUB_SECRET, plan): gratis / lainnya = tanpa batas; lewat tenggang
+// = Starter (state 'turun', PUSAT_SUB_STARTER_DAYS hari) lalu baca saja. Isi paket di sini SAMA dengan PLAN_TIERS di
+// pt-scheduler/src/Plan.gs (tests/pusat.test.js membandingkan).
+var PUSAT_PLAN_FEATURES = ['finance', 'nutrition', 'care', 'photos', 'report', 'share', 'content', 'programAuto',
+  'telegramFull', 'templates', 'classes', 'coachShare', 'multiCoach'];
+var PUSAT_PLAN_LABELS = { finance: 'Keuangan', nutrition: 'Gizi', care: 'Asesmen & catatan sesi', photos: 'Foto progres', report: 'Laporan PDF',
+  share: 'Kartu bagikan', content: 'Info & tips', programAuto: 'Program otomatis', telegramFull: 'Semua pengingat WA', templates: 'Template program',
+  classes: 'Kelas grup', coachShare: 'Bagi hasil coach', multiCoach: 'Banyak coach' };
+var PUSAT_PLAN_TIER = {
+  starter: { clients: 15, coaches: 1, features: [] },
+  pro: { clients: 0, coaches: 1, features: ['finance', 'nutrition', 'care', 'photos', 'report', 'share', 'content', 'programAuto', 'telegramFull', 'templates'] },
+  studio: { clients: 0, coaches: 5, features: ['finance', 'nutrition', 'care', 'photos', 'report', 'share', 'content', 'programAuto', 'telegramFull', 'templates', 'classes', 'coachShare', 'multiCoach'] },
+};
+var PUSAT_PLAN_WARN_DAYS = 30;
+
+function planState_(slug) { var p = json_('PLAN_' + slug, null); return p && typeof p === 'object' ? p : {}; }
+function planSave_(slug, p) { props_().setProperty('PLAN_' + slug, JSON.stringify(p)); }
+function st0_(slug) { return subStatus_(subState_(slug), todayWib_()).state; }
+
+/** Paket yang harus ada di coach (murni terhadap SUB_ dan PLAN_). */
+function planWant_(slug, s) {
+  s = s || subState_(slug);
+  var p = planState_(slug), st = subStatus_(s, todayWib_());
+  var tier = PUSAT_PLAN_TIER[s.tier] ? s.tier : 'gratis';
+  if (tier === 'gratis') return { tier: 'gratis' };
+  if (st.state === 'turun') return { tier: 'starter', enforceFrom: p.enforceFrom || '', upgradeWa: prop_('PUSAT_WA') };
+  var want = { tier: tier };
+  if (Array.isArray(p.features) && (s.cycle === 'lifetime' || s.cycle === 'putus')) want.features = p.features.slice();
+  if (p.add && p.add.length) want.add = p.add.slice();
+  if (p.off && p.off.length) want.off = p.off.slice();
+  if (p.limits && (p.limits.clients != null || p.limits.coaches != null)) want.limits = p.limits;
+  if (p.enforceFrom) want.enforceFrom = p.enforceFrom;
+  if (prop_('PUSAT_WA')) want.upgradeWa = prop_('PUSAT_WA');
+  return want;
+}
+
+/** Kirim paket ke coach bila berubah, galat, atau `force` (cek harian). */
+function planSync_(slug, c, force) {
+  var p = planState_(slug), want = planWant_(slug), key = JSON.stringify(want), was = p.pushed;
+  if (!was && want.tier === 'gratis') return null;   // coach gratis yang belum pernah dikirimi: tidak dihubungi
+  if (was && was.key === key && !was.error && !force) return null;
+  var out = { key: key, at: new Date().toISOString(), error: '' };
+  try {
+    var j = askApps_(hubExec_(slug) || c.exec, { fn: 'hubPlan', args: [c.secret, want] });
+    if (j && j.code === 'unknown_fn') throw new Error('Library coach belum punya hubPlan; perbarui coach.');
+    if (!j || !j.ok) throw new Error(j && j.error ? j.error : 'tanpa jawaban');
+    if (j.data && j.data.plan) out.usage = { clients: j.data.plan.clients || null, coaches: j.data.plan.coaches || null };
+  } catch (e) {
+    out.error = String(e && e.message ? e.message : e).slice(0, 160);
+  }
+  p = planState_(slug);
+  p.pushed = out;
+  planSave_(slug, p);
+  return out;
+}
+
+/** Untuk /adminxnk. */
+function planView_(slug, s) {
+  var p = planState_(slug), want = planWant_(slug, s), base = PUSAT_PLAN_TIER[want.tier];
+  var st = json_('ST_' + slug, null), live = st && st.plan ? st.plan : null;
+  var on = !base ? PUSAT_PLAN_FEATURES.slice() : PUSAT_PLAN_FEATURES.filter(function (f) {
+    var b = (want.features || base.features).indexOf(f) !== -1;
+    if ((want.add || []).indexOf(f) !== -1) b = true;
+    if ((want.off || []).indexOf(f) !== -1) b = false;
+    return b;
+  });
+  return {
+    tier: want.tier, lapse: want.tier === 'starter' && s && s.tier !== 'starter', frozen: !!want.features,
+    base: base ? base.features : PUSAT_PLAN_FEATURES, on: on, add: p.add || [], off: p.off || [],
+    limits: { clients: p.limits && p.limits.clients != null ? p.limits.clients : null, coaches: p.limits && p.limits.coaches != null ? p.limits.coaches : null },
+    tierLimits: base ? { clients: base.clients, coaches: base.coaches } : null,
+    brand: { ok: brandOk_(s || subState_(slug)), pushed: json_('BRAND_' + slug, null) },
+    enforceFrom: p.enforceFrom || '',
+    usage: live ? { clients: live.clients || null, coaches: live.coaches || null } : (p.pushed && p.pushed.usage) || null,
+    pushed: p.pushed ? { at: p.pushed.at, error: p.pushed.error || '' } : null,
+    labels: PUSAT_PLAN_LABELS, features: PUSAT_PLAN_FEATURES,
+  };
+}
+
+/**
+ * Simpan pengecualian paket dari /adminxnk. Hanya pemilik.
+ * data: {on: [fitur], clients, coaches (kosong = ikut paket, 0 = tanpa batas), enforceFrom (YYYY-MM-DD | '' | 'warn' = 30 hari lagi)}
+ * `on` dibandingkan dengan isi paket: selisihnya jadi add / off. Lifetime / beli putus: simpan pertama membekukan daftar fitur.
+ */
+function pusatPlanSave(token, slug, data) {
+  requireOwnerToken_(token);
+  slug = String(slug || '');
+  var all = json_('COACHES', {});
+  if (!PUSAT_SLUG_RE.test(slug) || !all[slug]) throw new Error('Coach tidak terdaftar.');
+  if (outState_(slug)) throw new Error('Coach ini sudah keluar. Tekan "Aktifkan lagi" dulu.');
+  data = data && typeof data === 'object' ? data : {};
+  var s = subState_(slug), base = PUSAT_PLAN_TIER[s.tier];
+  if (!base) throw new Error('Pilih paket Starter, Pro atau Studio di Langganan dulu.');
+  var p = planState_(slug);
+  var lifetime = s.cycle === 'lifetime' || s.cycle === 'putus';
+  if (lifetime && !Array.isArray(p.features)) p.features = base.features.slice();
+  var ref = lifetime ? p.features : base.features;
+  if (data.on != null) {
+    if (!Array.isArray(data.on)) throw new Error('Daftar fitur tidak valid.');
+    var on = data.on.map(String);
+    on.forEach(function (f) { if (PUSAT_PLAN_FEATURES.indexOf(f) === -1) throw new Error('Fitur tidak dikenal: ' + f); });
+    p.add = on.filter(function (f) { return ref.indexOf(f) === -1; });
+    p.off = ref.filter(function (f) { return on.indexOf(f) === -1; });
+  }
+  var num = function (v, what) {
+    var t = String(v == null ? '' : v).trim();
+    if (t === '') return null;
+    var n = Number(t);
+    if (!isFinite(n) || n < 0 || Math.floor(n) !== n || n > 10000) throw new Error(what + ' harus bilangan bulat 0–10000.');
+    return n;
+  };
+  p.limits = { clients: num(data.clients, 'Batas klien'), coaches: num(data.coaches, 'Batas coach') };
+  if (data.enforceFrom === 'warn') p.enforceFrom = addDays_(todayWib_(), PUSAT_PLAN_WARN_DAYS);
+  else if (data.enforceFrom != null) {
+    var d = String(data.enforceFrom).trim();
+    if (d && !validDate_(d)) throw new Error('Tanggal mulai berlaku tidak valid.');
+    p.enforceFrom = d;
+  }
+  planSave_(slug, p);
+  planSync_(slug, all[slug], false);
+  return pusatOverview(token);
+}
+
+
+/** Murni: Setup Custom sudah dibayar? */
+function brandOk_(s) { return !!(s && s.setup && s.setup.kind === 'custom' && s.setup.paidAt); }
+
+/**
+ * Fase AF: tulis customBrand di hub.json (workflow Hub XNK, isian merek ya/tidak) bila berbeda dari yang terakhir dikirim.
+ * Coach yang belum pernah diatur (tanpa BRAND_<slug>) dan tanpa Setup Custom tidak disentuh: halaman lamanya tetap.
+ * Mengembalikan '' | 'ok' | pesan langkah manual. Tidak pernah melempar (simpan tetap berhasil).
+ */
+function brandSync_(slug) {
+  var want = brandOk_(subState_(slug)), was = json_('BRAND_' + slug, null);
+  if (was && was.on === want && !was.error) return '';
+  if (!was && !want && subState_(slug).setup.kind !== 'custom') return '';
+  var out = { on: want, at: new Date().toISOString(), error: '' };
+  var manual = 'Jalankan sendiri: repo hub → Actions → Hub XNK → aksi simpan, slug ' + slug + ', merek ' + (want ? 'ya' : 'tidak') + '.';
+  if (!prop_('GITHUB_TOKEN')) out.error = manual;
+  else try { hubDispatch_({ aksi: 'simpan', slug: slug, warna: 'tetap', merek: want ? 'ya' : 'tidak' }); } catch (e) { out.error = String(e && e.message ? e.message : e).slice(0, 100) + '. ' + manual; }
+  props_().setProperty('BRAND_' + slug, JSON.stringify(out));
+  return out.error || 'ok';
 }

@@ -73,5 +73,3 @@
       if (window.updateUI) window.updateUI();
     }, function (err) { done(); window.showToast(window.waitErr ? window.waitErr(err) : window.authMessage(err)); });
   };
-})();
-</script>
