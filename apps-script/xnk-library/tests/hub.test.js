@@ -57,7 +57,7 @@ test('build: landing di akar, panel di /<slug>/, portal di /<slug>/klien/, 404 a
   assert.ok(!files['index.html'].includes('<!--CONTACT-->'));
   // Tanpa coach pun situs jadi (hanya landing).
   const empty = hub.build({ coaches: [] }).files;
-  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/') && !n.startsWith('fonts/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'index.html', 'llms.txt', 'manifest.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js']);
+  assert.deepEqual(Object.keys(empty).filter(n => !n.startsWith('img/') && !n.startsWith('fonts/')).sort(), ['.nojekyll', '404.html', '_hub/versions.json', 'adminxnk/index.html', 'favicon.ico', 'index.html', 'llms.txt', 'manifest.webmanifest', 'robots.txt', 'sitemap.xml', 'sw.js']);
   assert.ok(Buffer.isBuffer(empty['img/og.jpg']) && empty['img/og.jpg'].length > 1000, 'gambar landing ikut dibangun');
 });
 
@@ -72,7 +72,7 @@ test('landing: daftar coach dari hub.json, nama di-escape, gambar yang dirujuk a
   assert.equal(html.split('Hubungi XNK').length - 1, 1, 'kontak di penutup');
   for (const m of html.matchAll(/(?:src|content)="(?:https:\/\/xnk\.web\.id\/)?(img\/[^"]+)"/g)) assert.ok(m[1] in files, m[1]);
   // Form masuk tetap sama (hub-check dan link lama bergantung padanya).
-  for (const id of ['id="f"', 'id="slug"', 'id="err"', 'data-to="klien"', 'data-to="panel"', '<title>XNK · aplikasi personal trainer dan kliennya</title>']) assert.ok(html.includes(id), id);
+  for (const id of ['id="f"', 'id="slug"', 'id="err"', 'data-to="klien"', 'data-to="panel"', '<title>XNK | Aplikasi Personal Trainer &amp; Manajemen Klien</title>']) assert.ok(html.includes(id), id);
   const evil = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['index.html'];
   assert.ok(!evil.includes('<img src=x') && evil.includes('&lt;img src=x'), 'nama usaha di-escape');
   const evilInfo = hub.build({ coaches: [{ slug: 'evil', brand: '<img src=x onerror=alert(1)>', exec: EXEC(3) }] }).files['evil/info/index.html'];
@@ -397,7 +397,7 @@ test('landing: semua harga dari hub-harga.js, bulanan dan tahunan, setup, tabel 
   assert.deepEqual(row('Program latihan otomatis'), ['Tidak', 'Ya', 'Ya']);
   assert.deepEqual(row('Halaman info publik \\(paket, jam kosong, daftar\\)'), ['Ya', 'Ya', 'Ya']);
   assert.ok(html.includes('Mulai ' + harga.mulai() + '/bulan') && html.includes('<dd>' + harga.mulai() + '/bln</dd>'), 'hero dan ringkasan: harga termurah');
-  assert.ok(html.includes('mulai ' + harga.mulai() + '/bulan.">'), 'deskripsi: harga termurah');
+  assert.ok(!/<meta name="description" content="[^"]*Rp/.test(html), 'deskripsi: tanpa harga (tidak terpotong di Google)');
 });
 
 test('landing: form daftar membuka WhatsApp (hanya kontak wa.me), Instagram, coba demo', () => {
