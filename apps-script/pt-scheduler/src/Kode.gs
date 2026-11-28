@@ -536,6 +536,7 @@ function getAppSettings(token) {
     clientGuideEnabled: _guideEnabled_(),
     feedbackEnabled: _feedbackEnabled_(),
     shareEnabled: _shareEnabled_(),
+    posterEnabled: _posterEnabled_(),   // Fase AG
     warmEnabled: _warmEnabled_(),
     shareQrUrl: PropertiesService.getScriptProperties().getProperty('SHARE_QR_URL') || '',
     shareQrDefault: SHARE_QR_DEFAULT,
@@ -595,6 +596,7 @@ function updateAppSettingsImpl_(token, payload) {
   if (emailMode !== null) setOrDelete('NOTIF_EMAIL_REMINDERS', emailMode);
   if (Object.prototype.hasOwnProperty.call(payload, 'clientGuideEnabled')) setOrDelete('CLIENT_GUIDE_ENABLED', payload.clientGuideEnabled ? '' : 'false');
   if (Object.prototype.hasOwnProperty.call(payload, 'shareEnabled')) setOrDelete('SHARE_ENABLED', payload.shareEnabled ? '' : 'false');
+  if (Object.prototype.hasOwnProperty.call(payload, 'posterEnabled')) setOrDelete('POSTER_ENABLED', payload.posterEnabled ? '' : 'false');   // Fase AG
   if (qrUrl !== null) setOrDelete('SHARE_QR_URL', qrUrl);
   if (Object.prototype.hasOwnProperty.call(payload, 'warmEnabled')) {   // Fase W6a: sakelar + pemicu sekaligus
     setOrDelete('WARM_ENABLED', payload.warmEnabled ? 'true' : '');
@@ -2629,6 +2631,7 @@ function getAdminMore(token, month, year, fresh) {
       renewals: part('renewals', function () { return getRenewalRequests(token); }),
       finance: finance,
       shareEnabled: _shareEnabled_(),
+      posterEnabled: _posterEnabled_(),   // Fase AG
       revenue: part('revenue', function () { return finOn ? { fin: true, o: _financeSummary_(m, y) } : _revenueSummary_(m, y); }),
       packageTrend: part('packageTrend', function () { return _packageTrendStats_(m, y); }),
       hub: part('hub', function () { return _coachHub_(new Date(), tr); }),

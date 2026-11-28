@@ -42,6 +42,9 @@ const NEEDED = ['_ensureCoachSchema_', '_getMemberDataSheet_', '_getMembersLogSh
 // selalu tampil (tidak membuka ulang halaman coach dari token di perangkat ini).
 const XNK_BY_LINK = '<a href="https://xnk.web.id/?hub" target="_blank" rel="noopener" style="color:inherit;font-weight:700;text-decoration:none">XNK</a>';
 
+// Fase AG: satu baris data poster "XNK Coach" (harga XNK untuk coach lain) di PosterData.gs; di Library jadi null.
+const POSTER_XNK_LINE = (fs.readFileSync(path.join(SRC, 'PosterData.gs'), 'utf8').replace(/\r\n?/g, '\n').match(/^const POSTER_XNK = .+;$/m) || ['(baris POSTER_XNK tidak ditemukan)'])[0];
+
 // [berkas, cari (teks persis), ganti, jumlah yang diharapkan]
 const TEXT_SWAPS = [
   // Google Analytics milik xnk.my.id tidak ikut ke coach lain (data kunjungan klien coach bukan milik XNK; T-2223).
@@ -125,6 +128,10 @@ const TEXT_SWAPS = [
   ['App.html', `'<p class="hint" style="margin-top:14px;text-align:center">HP ini mengingat akun selama 90 hari.</p>' +\n`,
     `'<p class="hint" style="margin-top:14px;text-align:center">HP ini mengingat akun selama 90 hari.</p>' +\n` +
     `      '<p class="hint xnk-by" style="margin-top:8px;text-align:center;font-size:.75rem;opacity:.75">Didukung ${XNK_BY_LINK}</p>' +\n`, 1],
+  // Fase AG: poster coach. Merek poster = nama usaha coach; poster "XNK Coach" (menjual XNK ke coach lain) hanya di xnk.my.id.
+  ['App.html', "const poBrand = function () { return window.brandName ? window.brandName() : 'XNK'; };", "const poBrand = function () { return window.brandName(); };", 1],
+  ['PosterData.gs', POSTER_XNK_LINE, 'const POSTER_XNK = null;', 1],
+  ['Bagikan.html', "    mark: function () { return ''; }", "    mark: function () { return L.id.poweredBy; }", 1],
   ['Bagikan.html', "coachedBy: 'Coached by',", "coachedBy: 'Coached by', poweredBy: 'Powered by XNK',", 1],
   ['Bagikan.html', "coachedBy: 'Dilatih oleh',", "coachedBy: 'Dilatih oleh', poweredBy: 'Didukung XNK',", 1],
   // Satu baris kecil di pinggir bawah kartu (di bawah blok foot, di dalam pinggir 72 px), warna tinta kartu: terbaca di semua gaya.

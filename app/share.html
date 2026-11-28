@@ -3468,6 +3468,20 @@ details.cp-day[open] .cp-day-names { display: none; }
 .plan-fold > summary svg:last-child { transition: transform .15s; }
 .plan-fold[open] > summary svg:last-child { transform: rotate(180deg); }
 .plan-fold > .plan-chips { padding-bottom: 6px; }
+/* ── Fase AG: editor poster coach. Memakai kerangka editor kartu bagikan (.share-sheet, .sh-*); di sini hanya tambahannya. ── */
+.sh-btns #po-go { flex: 1; }
+@media (min-width: 768px) { .sh-btns #po-go { flex: none; min-width: 9rem; } }
+.po-msg { margin: 0; max-width: 28rem; text-align: center; font-size: var(--fs-sm); color: var(--fg-2); }
+.po-list { display: flex; flex-direction: column; border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+.po-li { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 44px; padding: 10px 12px; text-align: left; color: var(--fg); background: transparent; border: 0; }
+.po-li + .po-li { border-top: 1px solid var(--border); }
+.po-li b { font-size: var(--fs-sm); }
+.po-li span { font-size: var(--fs-xs); color: var(--fg-muted); }
+.po-li.active { background: var(--surface-3); box-shadow: inset 3px 0 0 var(--fg); }
+.poster-sheet .field { display: flex; flex-direction: column; gap: 4px; }
+.poster-sheet .label { color: var(--fg-muted); }
+.po-consent { gap: 12px; margin-bottom: 12px; }
+@media (hover: hover) { .po-li:hover:not(.active) { background: var(--surface-3); } }
 </style>
 <style>html,body{height:100%;margin:0}.layer{position:fixed;inset:0}#share-toast{position:fixed;left:16px;right:16px;bottom:24px;background:#111;color:#fff;padding:12px;border-radius:10px;display:none;z-index:99;text-align:center}</style>
 </head><body>
@@ -5144,22 +5158,28 @@ details.cp-day[open] .cp-day-names { display: none; }
     if (st.tray.length) files = st.tray.map(t => ({ blob: t.blob, name: t.name }));
     else if (P.fmt === 'png') { if (!st.blob) return; files = [{ blob: st.blob, name: fname('png') }]; }
     else { const out = await renderOut(); if (!out || !out.blob) return; files = [out]; }
+    sendFiles(files, null);
+  };
+  /** Bagikan berkas lewat halaman pembungkus (bila ada) atau navigator.share; fallback = simpan bila pembungkus gagal. */
+  function sendFiles(files, fallback) {
+    st.fallback = fallback || null;
     if (st.host) {
       st.pending = setTimeout(function () { st.pending = null; shareInFrame(files); }, 1500);
       try { window.top.postMessage(files.length === 1 ? { xnk: 'share', blob: files[0].blob, name: files[0].name } : { xnk: 'share', files: files }, '*'); return; } catch (e) { clearTimeout(st.pending); }
     }
     shareInFrame(files);
-  };
+  }
   function shareInFrame(files) {
     const fl = files.map(f => new File([f.blob], f.name, { type: f.blob.type }));
     if (navigator.canShare && navigator.canShare({ files: fl })) navigator.share({ files: fl }).catch(function () {});
     else files.forEach(f => download(f.blob, f.name));
   }
-  window.shareCopy = function () {
-    if (!st.blob) return;
-    if (st.host) { try { window.top.postMessage({ xnk: 'copy', blob: st.blob }, '*'); return; } catch (e) {} }
-    try { navigator.clipboard.write([new ClipboardItem({ 'image/png': st.blob })]).then(function () { window.showToast('Disalin. Tempel di Story Instagram.'); }, function () { window.showToast('Salin tidak didukung. Pakai Simpan.'); }); } catch (e) { window.showToast('Salin tidak didukung. Pakai Simpan.'); }
-  };
+  window.shareCopy = function () { copyBlob(st.blob); };
+  function copyBlob(blob) {
+    if (!blob) return;
+    if (st.host) { try { window.top.postMessage({ xnk: 'copy', blob: blob }, '*'); return; } catch (e) {} }
+    try { navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(function () { window.showToast('Disalin. Tempel di Story Instagram.'); }, function () { window.showToast('Salin tidak didukung. Pakai Simpan.'); }); } catch (e) { window.showToast('Salin tidak didukung. Pakai Simpan.'); }
+  }
   window.shareTrayAdd = async function () {
     if (st.tray.length >= 5) return;
     const out = await renderOut(); if (!out || !out.blob) return;
@@ -5172,7 +5192,7 @@ details.cp-day[open] .cp-day-names { display: none; }
     if (window.top === window || e.source !== window.top) return;
     const d = e.data; if (!d || typeof d !== 'object') return;
     if (d.xnk === 'host') st.host = d.share === true;
-    else if (d.xnk === 'share-done') { clearTimeout(st.pending); st.pending = null; if (!d.ok) window.shareSave(); }
+    else if (d.xnk === 'share-done') { clearTimeout(st.pending); st.pending = null; const f = st.fallback; st.fallback = null; if (!d.ok) { if (f) f(); else window.shareSave(); } }
     else if (d.xnk === 'copy-done') window.showToast(d.ok ? 'Disalin. Tempel di Story Instagram.' : 'Salin tidak didukung. Pakai Simpan.');
   });
   document.addEventListener('keydown', function (e) {
@@ -5231,6 +5251,14 @@ details.cp-day[open] .cp-day-names { display: none; }
     return true;
   };
   window.shareNudgeClose = function () { const el = $('share-nudge'); if (el) { el.classList.remove('show'); setTimeout(() => el.classList.add('hide'), 300); } };
+
+  // Fase AG: alat gambar untuk poster coach (parts/app/27-poster.part). Hanya dibaca; kartu bagikan tidak berubah.
+  window.shareKit = {
+    W: W, font: font, Tx: Tx, caps: caps, fit: fit, rrect: rrect, drawCover: drawCover, drawQr: drawQr, drawAvatar: drawAvatar, tinted: tinted,
+    loadFonts: loadFonts, logo: logo, qr: function (t) { return QR.make(t); }, download: download, sendFiles: sendFiles, copy: copyBlob,
+    // Tanda kecil di pojok poster: kosong di xnk.my.id; Library menggantinya dengan teks tanda (build-lib TEXT_SWAPS).
+    mark: function () { return ''; }
+  };
 
   // Untuk tools/share-check.js: gambar kartu tanpa lembar, ambil kotak tata letak dan QR.
   window.shareDraw = function (card, o) { return draw(card, o); };

@@ -31,4 +31,3 @@
 .plan-fold > summary svg:last-child { transition: transform .15s; }
 .plan-fold[open] > summary svg:last-child { transform: rotate(180deg); }
 .plan-fold > .plan-chips { padding-bottom: 6px; }
-</style>

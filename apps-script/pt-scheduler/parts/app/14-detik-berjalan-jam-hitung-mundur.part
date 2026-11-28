@@ -1072,6 +1072,7 @@
       window.showToast(v ? 'Alamat QR tersimpan.' : 'Kembali ke alamat bawaan.');
     }).catch(function (err) { done(); window.showToast(waitErr(err, 'Gagal: ')); });
   };
+  window.setPoster = function (el) { setToggle(el, 'posterEnabled', 'Poster coach aktif.', 'Poster coach dimatikan.', 'Poster coach', function (v) { window.posterOn = v !== false; }); };   // Fase AG
   window.setShare = function (el) { setToggle(el, 'shareEnabled', 'Kartu bagikan aktif.', 'Kartu bagikan dimatikan.', 'Kartu bagikan', function (v) { window.shareOn = v !== false; }); };
   window.setWarm = function (el) { setToggle(el, 'warmEnabled', 'Data disiapkan di latar tiap 15 menit.', 'Penyiapan data di latar dimatikan.', 'Siapkan data di latar'); };
   window.setClientGuide = function (el) { setToggle(el, 'clientGuideEnabled', 'Panduan klien baru aktif.', 'Panduan klien baru dimatikan.', 'Panduan klien baru'); };

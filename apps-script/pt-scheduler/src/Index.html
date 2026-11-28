@@ -326,6 +326,7 @@
           <button type="button" class="action-tile" onclick="window.quickAction('client')"><span class="at-icon"><i data-lucide="user-plus"></i></span>Klien</button>
           <button type="button" class="action-tile" onclick="window.quickAction('coach')"><span class="at-icon"><i data-lucide="dumbbell"></i></span>Coach</button>
           <button type="button" class="action-tile" onclick="window.quickAction('content')"><span class="at-icon"><i data-lucide="megaphone"></i></span>Konten</button>
+          <button type="button" class="action-tile poster-tile" onclick="window.quickAction('poster')"><span class="at-icon"><i data-lucide="image"></i></span>Poster</button>
           <button type="button" class="action-tile fin-tile" onclick="window.finQuick('payment')"><span class="at-icon"><i data-lucide="banknote"></i></span>Pembayaran</button>
           <button type="button" class="action-tile fin-tile" onclick="window.finQuick('expense')"><span class="at-icon"><i data-lucide="receipt"></i></span>Pengeluaran</button>
         </div>
@@ -1036,6 +1037,9 @@
       <div class="sheet-body stack" id="share-body"></div>
       <div class="sheet-foot" id="share-foot"></div>
     </div>
+
+    <!-- Fase AG: poster coach (isi dibuat oleh parts/app/27-poster.part) -->
+    <div class="sheet tall hide" id="sheet-poster" role="dialog" aria-modal="true" aria-labelledby="po-title"></div>
 
     <!-- Progres: lihat satu foto -->
     <div class="sheet tall hide" id="sheet-photo-view" role="dialog" aria-modal="true" aria-labelledby="pg-view-title">
