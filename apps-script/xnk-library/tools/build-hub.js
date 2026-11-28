@@ -200,6 +200,11 @@ function readHub(cfg, opts) {
       const u = String(c.url).trim();
       if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s'"<>\\]*)?$/i.test(u)) throw new Error(`hub.json, "${slug}": url harus link https:// situs coach.`);
       out.url = u;
+      if (c.klienUrl != null && c.klienUrl !== '') {
+        const k = String(c.klienUrl).trim();
+        if (!/^https:\/\/[a-z0-9.-]+\.[a-z]{2,}(\/[^\s'"<>\\]*)?$/i.test(k)) throw new Error(`hub.json, "${slug}": klienUrl harus link https:// portal klien.`);
+        out.klienUrl = k;
+      }
     }
     return out;
   });
@@ -467,7 +472,7 @@ function infoPage(c) {
     `<a class="btn ghost" href="${esc(maps)}" target="_blank" rel="noopener"><svg class="i" aria-hidden="true"><use href="#i-map"/></svg>Buka di Maps</a></div>\n    </section>`;
   const logo = c.logoFile ? `/${c.slug}/logo.${c.logoFile.ext}` : '';
   const ini = esc((c.brand.match(/[A-Za-z0-9]/) || ['?'])[0].toUpperCase());
-  const cfg = { exec: c.exec, slug: c.slug, brand: c.brand, klien: c.url || `/${c.slug}/klien/`, place: pl };
+  const cfg = { exec: c.exec, slug: c.slug, brand: c.brand, klien: c.klienUrl || c.url || `/${c.slug}/klien/`, place: pl };
   const swaps = {
     '__ACCENT_ATTR__': c.accent ? ` data-accent="${c.accent}"` : '',
     '__THEME_KEY__': JSON.stringify(c.storageSlug + ':xnk_theme'),
@@ -509,10 +514,10 @@ function build(cfg, opts) {
     if (c.url) {
       if (c.logoFile) files[`${c.slug}/logo.${c.logoFile.ext}`] = c.logoFile.body;
       files[c.slug + '/info/index.html'] = infoPage(c);
-      for (const sub of ['', 'klien/']) files[`${c.slug}/${sub}index.html`] = cspStatic(['<!doctype html>', '<html lang="id">', '<head>',
+      for (const sub of ['', 'klien/']) { const to = sub && c.klienUrl ? c.klienUrl : c.url; files[`${c.slug}/${sub}index.html`] = cspStatic(['<!doctype html>', '<html lang="id">', '<head>',
         '<meta charset="utf-8">', '<meta name="viewport" content="width=device-width, initial-scale=1">', '<meta name="robots" content="noindex">',
-        `<meta http-equiv="refresh" content="0; url=${esc(c.url)}">`, `<title>${esc(c.brand)}</title>`, '</head>', '<body>',
-        `<p style="font:16px/1.5 system-ui,sans-serif;text-align:center;padding:48px 16px"><a href="${esc(c.url)}">${esc(c.brand)}</a></p>`, '</body>', '</html>', ''].join('\n'));
+        `<meta http-equiv="refresh" content="0; url=${esc(to)}">`, `<title>${esc(c.brand)}</title>`, '</head>', '<body>',
+        `<p style="font:16px/1.5 system-ui,sans-serif;text-align:center;padding:48px 16px"><a href="${esc(to)}">${esc(c.brand)}</a></p>`, '</body>', '</html>', ''].join('\n')); }
       continue;
     }
     const v = versions[c.slug];
