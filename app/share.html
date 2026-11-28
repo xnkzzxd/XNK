@@ -2189,6 +2189,7 @@ details.fold #profile-tasks-wrap > .section-head { justify-content: flex-end; ma
 .share-preview.solid { background: #050505; }
 .share-preview img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; -webkit-user-drag: none; }
 .share-preview .sh-anim { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.share-preview .sh-cnv { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .share-sheet .sh-play { gap: 6px; }
 .share-preview:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .sh-busy { position: absolute; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: flex-end; }
@@ -3572,7 +3573,14 @@ details.cp-day[open] .cp-day-names { display: none; }
       localStorage.setItem(PREF_KEY, JSON.stringify(p));
     } catch (e) {}
   }
-  function kp(kind) { kind = kind || st.kind; P.k[kind] = Object.assign({}, KDEF, P.k[kind] || {}); return P.k[kind]; }
+  // Satu objek per kartu yang sama terus (dulu tiap panggilan membuat objek baru, sehingga isian yang ditulis ke objek lama hilang).
+  function kp(kind) {
+    kind = kind || st.kind;
+    const cur = P.k[kind];
+    if (!cur || typeof cur !== 'object') { P.k[kind] = JSON.parse(JSON.stringify(KDEF)); return P.k[kind]; }
+    Object.keys(KDEF).forEach(function (x) { if (cur[x] === undefined) cur[x] = Array.isArray(KDEF[x]) ? KDEF[x].slice() : KDEF[x]; });
+    return cur;
+  }
 
   // ── format ───────────────────────────────────────────────────────────────────
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -4712,7 +4720,7 @@ details.cp-day[open] .cp-day-names { display: none; }
       '<h2 class="sh-title" id="share-title">Bagikan</h2><button type="button" class="btn btn-ghost btn-sm sh-reset" onclick="window.shareReset()">Reset</button></div>' +
       '<div class="sh-main"><div class="sh-stage" id="share-stage">' +
       '<button type="button" class="icon-btn plain sh-arrow prev" onclick="window.shareStep(-1)" aria-label="Kartu sebelumnya">' + ic('chevron-left') + '</button>' +
-      '<div class="share-preview" id="share-box" role="button" tabindex="0" aria-label="Pratinjau kartu. Geser untuk ganti kartu, ketuk untuk layar penuh."><img id="share-img" alt="Pratinjau kartu bagikan" draggable="false"><div class="sh-busy hide" id="share-busy"></div></div>' +
+      '<div class="share-preview" id="share-box" role="button" tabindex="0" aria-label="Pratinjau kartu. Geser untuk ganti kartu, ketuk untuk layar penuh."><img id="share-img" alt="Pratinjau kartu bagikan" draggable="false"><canvas id="share-cnv" class="sh-cnv hide" aria-hidden="true"></canvas><div class="sh-busy hide" id="share-busy"></div></div>' +
       '<button type="button" class="icon-btn plain sh-arrow next" onclick="window.shareStep(1)" aria-label="Kartu berikutnya">' + ic('chevron-right') + '</button>' +
       '<div class="sh-dots" id="share-dots" aria-hidden="true"></div></div>' +
       '<div class="sh-side"><div class="sh-tools" id="share-tabs" role="tablist" aria-label="Alat kartu"></div><div class="sh-body" id="share-body"></div></div></div>' +
@@ -4910,23 +4918,42 @@ details.cp-day[open] .cp-day-names { display: none; }
   function refresh() {
     if (st.playing) stopPlay();
     clearTimeout(timer);
+    clearTimeout(st.blobT); st.blobOk = false;
     timer = setTimeout(async function () {
       if (!st.card) return;
       const my = ++st.token;
       const o = opts();
-      const cnv = await draw(st.card, o);
-      const blob = await new Promise(r => cnv.toBlob(r, 'image/png'));
-      if (my !== st.token || !blob) return;
-      st.blob = blob; if (st.url) URL.revokeObjectURL(st.url); st.url = URL.createObjectURL(blob);
-      const im = $('share-img'); if (im) im.src = st.url;
       const box = $('share-box');
       st.ratio = o.H / 1080; fitBox();
+      // Pratinjau cepat: digambar langsung di kanvas seukuran kotak pratinjau (bukan PNG 1080 px tiap perubahan).
+      const cv = $('share-cnv');
+      if (cv && box && box.clientWidth) {
+        const sc = Math.max(.2, Math.min(1, box.clientWidth * Math.min(2, window.devicePixelRatio || 1) / W));
+        await draw(st.card, Object.assign({}, o, { scale: sc }), cv);
+        if (my !== st.token) return;
+        cv.classList.remove('hide');
+        const im = $('share-img'); if (im) im.style.visibility = 'hidden';   // gambar lama tidak tembus di kartu transparan
+      }
+      // PNG penuh untuk dibagikan dibuat di belakang setelah perubahan berhenti sebentar.
+      st.blobT = setTimeout(function () { makeBlob(my); }, cv ? 400 : 0);
       if (box) {
         box.classList.toggle('ink-dark', !(o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen' || o.style === 'foto') && o.ink === 'hitam');
         box.classList.toggle('solid', o.style === 'gelap' || o.style === 'terang' || o.style === 'aksen' || o.style === 'foto');
       }
     }, 50);
   }
+  /** PNG penuh 1080 px untuk Bagikan / Simpan / Salin. Kembali: blob (atau null bila sudah tidak berlaku). */
+  async function makeBlob(my) {
+    if (!st.card) return null;
+    if (my == null) my = st.token;
+    const cnv = await draw(st.card, opts());
+    const blob = await new Promise(r => cnv.toBlob(r, 'image/png'));
+    if (my !== st.token || !blob) return null;
+    st.blob = blob; st.blobOk = true; if (st.url) URL.revokeObjectURL(st.url); st.url = URL.createObjectURL(blob);
+    const im = $('share-img'); if (im) im.src = st.url;
+    return blob;
+  }
+  async function ensureBlob() { if (st.blobOk && st.blob) return st.blob; clearTimeout(st.blobT); return (await makeBlob()) || st.blob; }
   // Pratinjau sebesar mungkin di ruang yang ada, rasio tepat (story, portrait, kotak).
   function fitBox() {
     const stage = $('share-stage'), box = $('share-box'); if (!stage || !box || !stage.clientHeight) return;
@@ -5079,7 +5106,7 @@ details.cp-day[open] .cp-day-names { display: none; }
     const o = opts();
     if (P.fmt === 'hq') { o.scale = 2; const c = await draw(st.card, o); const b = await new Promise(r => c.toBlob(r, 'image/png')); return { blob: b, name: fname('png') }; }
     if (P.fmt === 'video') return recordVideo();
-    return { blob: st.blob, name: fname('png') };
+    return { blob: await ensureBlob(), name: fname('png') };
   }
   function videoType() {
     const c = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
@@ -5156,7 +5183,7 @@ details.cp-day[open] .cp-day-names { display: none; }
     // Gambar biasa: blob sudah siap sebelum tombol ditekan (aktivasi pengguna tetap utuh untuk navigator.share).
     let files;
     if (st.tray.length) files = st.tray.map(t => ({ blob: t.blob, name: t.name }));
-    else if (P.fmt === 'png') { if (!st.blob) return; files = [{ blob: st.blob, name: fname('png') }]; }
+    else if (P.fmt === 'png') { const b = await ensureBlob(); if (!b) return; files = [{ blob: b, name: fname('png') }]; }
     else { const out = await renderOut(); if (!out || !out.blob) return; files = [out]; }
     sendFiles(files, null);
   };
@@ -5174,7 +5201,7 @@ details.cp-day[open] .cp-day-names { display: none; }
     if (navigator.canShare && navigator.canShare({ files: fl })) navigator.share({ files: fl }).catch(function () {});
     else files.forEach(f => download(f.blob, f.name));
   }
-  window.shareCopy = function () { copyBlob(st.blob); };
+  window.shareCopy = async function () { copyBlob(await ensureBlob()); };
   function copyBlob(blob) {
     if (!blob) return;
     if (st.host) { try { window.top.postMessage({ xnk: 'copy', blob: blob }, '*'); return; } catch (e) {} }
